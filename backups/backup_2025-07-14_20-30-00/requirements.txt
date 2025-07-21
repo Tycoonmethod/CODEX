@@ -1,0 +1,9 @@
+streamlit
+numpy
+pandas
+plotly
+scipy
+statsmodels
+matplotlib
+seaborn 
+pulp>=2.7.0 
