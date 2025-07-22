@@ -2,7 +2,6 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-import datetime
 from datetime import datetime, date, time, timedelta
 import traceback
 from translations import TEXT, LANGUAGES
@@ -162,17 +161,16 @@ def get_completion_pct(
 
 
 def to_dt(x):
-    """
-    Convierte un objeto date o datetime a un objeto datetime.
-    Si el objeto de entrada ya es un datetime, lo devuelve sin cambios.
-    Si es un objeto date, lo convierte a datetime con la hora mínima (00:00:00).
-    """
-    if isinstance(x, datetime.datetime):
+    """Convierte date o datetime.date en datetime.datetime a las 00:00h"""
+    if x is None:
+        return datetime.now()
+    if isinstance(x, datetime):
         return x
-    if isinstance(x, datetime.date):
-        return datetime.datetime.combine(x, datetime.time.min)
-    # Opcional: manejar otros tipos de datos si es necesario
-    raise TypeError("La entrada para to_dt debe ser un objeto date o datetime")
+    if isinstance(x, date):
+        return datetime.combine(x, time.min)
+    if isinstance(x, (int, float)):
+        return datetime.fromtimestamp(x)
+    return x
 
 
 def get_days_between(start_date, end_date):
@@ -312,13 +310,15 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
             except Exception as e:
                 st.error(f"Error en construir_cronograma_seguro: {type(e).__name__}: {e}")
                 st.error(f"Traceback completo: {traceback.format_exc()}")
-                return [], [], {}, {}
+                # Devolver valores vacíos pero válidos para evitar errores posteriores
+                return pd.to_datetime([]), [], {}, {}
         # --- FIN DEL NUEVO BLOQUE DE LÓGICA CORREGIDA ---
 
     except Exception as e:
         st.error(f"Error en construir_cronograma_seguro: {type(e).__name__}: {e}")
         st.error(f"Traceback completo: {traceback.format_exc()}")
-        return [], [], {}, {}
+        # Devolver valores vacíos pero válidos para evitar errores posteriores
+        return pd.to_datetime([]), [], {}, {}
 
 
 # Rango global donde pueden moverse los sliders
