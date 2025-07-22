@@ -923,7 +923,7 @@ elif st.session_state.selected_page == "modelo":
             "E2E": {"start": datetime(2025, 9, 1), "end": datetime(2025, 9, 30)},
             "Training": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 31)},
             "PRO": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 30)},
-            "Hypercare": {"start": datetime(2025, 11, 4), "end": datetime(2025, 12, 3)}
+            "Hypercare": {"start": datetime(2025, 11, 3), "end": datetime(2025, 12, 3)}
         }
 
     # Calculate sum of risks for conditional bands
