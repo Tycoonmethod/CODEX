@@ -456,7 +456,7 @@ with st.sidebar:
     with st.expander("🔄 Fattori di Riassorbimento dei Ritardi", expanded=False):
         st.markdown("#### Configura la capacidad de reabsorción de delays por fase")
         
-        st.session_state.reabsorcion_e2e = st.slider(
+        st.slider(
             "Reabsorción de Delay en E2E (%)",
             0, 100,
             value=st.session_state.reabsorcion_e2e,
@@ -464,7 +464,7 @@ with st.sidebar:
             help="Porcentaje del retraso acumulado que el equipo de E2E puede reabsorber."
         )
         
-        st.session_state.reabsorcion_training = st.slider(
+        st.slider(
             "Reabsorción de Delay en Training (%)",
             0, 100,
             value=st.session_state.reabsorcion_training,
