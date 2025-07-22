@@ -507,6 +507,71 @@ dias_para_golive = max(
     0, (to_dt(datetime(2025, 11, 3)) - to_dt(datetime.now().date())).days
 )
 
+# --- KPIs Panel ---
+st.markdown("### 📊 KPIs del Proyecto")
+
+# Calculate additional KPIs
+try:
+    # 1. Retraso Total del Proyecto
+    project_end = max(fechas_esc)
+    baseline_end = max(fechas_base)
+    total_delay = (project_end - baseline_end).days
+    
+    # 2. Salud General del Proyecto
+    from phase_model import calculate_health_score
+    current_quality = calidad_esc[-1] if calidad_esc else 0
+    baseline_quality_final = calidad_base[-1] if calidad_base else 0
+    
+    # Calculate health score with example values
+    health_score = calculate_health_score(
+        quality=current_quality,
+        delay_days=total_delay,
+        budget_pct_used=100,  # Example value
+        sum_risks=sum(st.session_state.risk_values.values()) if hasattr(st.session_state, 'risk_values') else 0
+    )
+    
+    baseline_health_score = calculate_health_score(
+        quality=baseline_quality_final,
+        delay_days=0,
+        budget_pct_used=100,
+        sum_risks=0
+    )
+    
+    health_delta = health_score - baseline_health_score
+    
+    # Display KPIs in 3 columns
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            "🎯 Calidad Go-Live",
+            f"{calidad_esc_gl:.1f}%",
+            delta=f"{delta_gl:.1f}%",
+            help="Calidad del proyecto en la fecha de Go-Live (3-Nov-2025)"
+        )
+    
+    with col2:
+        st.metric(
+            "⏰ Retraso Total",
+            f"{total_delay} días",
+            delta=f"{total_delay} días",
+            delta_color="inverse",
+            help="Diferencia en días entre la fecha final del escenario y el baseline"
+        )
+    
+    with col3:
+        st.metric(
+            "🏥 Salud General",
+            f"{health_score:.1f}%",
+            delta=f"{health_delta:.1f}%",
+            help="Puntuación de salud general del proyecto (0-100%)"
+        )
+    
+except Exception as e:
+    st.error(f"Error calculando KPIs: {str(e)}")
+
+st.markdown("---")
+
 # Main content area with cards
 with main_container:
     col1, col2 = st.columns([2, 1])
