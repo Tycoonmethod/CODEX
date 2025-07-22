@@ -350,6 +350,14 @@ def initialize_state():
         st.session_state.budget_consumed = 100  # Default to 100%
     if "external_risks" not in st.session_state:
         st.session_state.external_risks = 0  # Default to 0%
+    
+    # Initialize scenario management
+    if "scenarios" not in st.session_state:
+        st.session_state.scenarios = {}
+    if "compare_scenarios" not in st.session_state:
+        st.session_state.compare_scenarios = []
+    if "scenario_name" not in st.session_state:
+        st.session_state.scenario_name = ""
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -432,6 +440,69 @@ with st.sidebar:
             key="external_risks_slider",
             help="Riesgos externos adicionales que afectan la salud del proyecto (cambios de alcance, problemas técnicos, etc.)."
         )
+    
+    # Scenario Management Section
+    st.markdown("---")
+    with st.expander("📁 Gestión de Escenarios", expanded=False):
+        st.markdown("#### Guarda y compara diferentes configuraciones del proyecto")
+        
+        # Scenario name input
+        scenario_name = st.text_input("Nombre del Escenario", key="scenario_name_input")
+        
+        # Save current scenario
+        if st.button("💾 Guardar Escenario Actual", use_container_width=True):
+            if not scenario_name:
+                st.error("Por favor, ingrese un nombre para el escenario")
+            else:
+                # Collect current scenario parameters
+                current_scenario = {
+                    'sliders': scenario_windows.copy(),
+                    'risks': st.session_state.risk_values.copy(),
+                    'budget_consumed': st.session_state.budget_consumed,
+                    'external_risks': st.session_state.external_risks,
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                st.session_state.scenarios[scenario_name] = current_scenario
+                st.success(f"✅ Escenario '{scenario_name}' guardado")
+        
+        # Scenario comparison selector
+        if st.session_state.scenarios:
+            st.markdown("##### 📊 Comparar Escenarios")
+            st.session_state.compare_scenarios = st.multiselect(
+                "Seleccionar escenarios a comparar",
+                options=list(st.session_state.scenarios.keys()),
+                default=st.session_state.compare_scenarios,
+                help="Selecciona múltiples escenarios para compararlos en el gráfico"
+            )
+            
+            # Show saved scenarios
+            st.markdown("##### 💾 Escenarios Disponibles")
+            for name, data in st.session_state.scenarios.items():
+                col1, col2, col3 = st.columns([2, 1, 1])
+                
+                with col1:
+                    st.markdown(f"**{name}**")
+                    st.caption(f"Guardado: {data['timestamp']}")
+                
+                with col2:
+                    if st.button("📥 Cargar", key=f"load_{name}"):
+                        # Update scenario windows with saved values
+                        scenario_windows = data['sliders'].copy()
+                        st.session_state.risk_values = data['risks'].copy()
+                        st.session_state.budget_consumed = data['budget_consumed']
+                        st.session_state.external_risks = data['external_risks']
+                        st.success(f"✅ Escenario '{name}' cargado")
+                        st.rerun()
+                
+                with col3:
+                    if st.button("🗑️ Eliminar", key=f"delete_{name}"):
+                        del st.session_state.scenarios[name]
+                        if name in st.session_state.compare_scenarios:
+                            st.session_state.compare_scenarios.remove(name)
+                        st.success(f"✅ Escenario '{name}' eliminado")
+                        st.rerun()
+                
+                st.markdown("---")
 
 # Desempaquetar fechas de escenario
 uat_start, uat_end = scenario_windows["UAT"]
@@ -698,6 +769,36 @@ with main_container:
             hovertemplate="%{y:.1f}%<extra>Escenario</extra>",
         )
     )
+    
+    # Add comparison scenarios
+    if st.session_state.compare_scenarios:
+        # Define colors for comparison scenarios
+        comparison_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD']
+        
+        for i, scenario_name in enumerate(st.session_state.compare_scenarios):
+            if scenario_name in st.session_state.scenarios:
+                scenario_data = st.session_state.scenarios[scenario_name]
+                
+                # Calculate timeline for this scenario
+                try:
+                    comp_fechas, comp_calidad, _, _ = construir_cronograma_seguro(
+                        sim_windows=scenario_data['sliders'],
+                        penalty_baseline=baseline_windows
+                    )
+                    
+                    # Add comparison trace
+                    color = comparison_colors[i % len(comparison_colors)]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[d.strftime("%Y-%m-%d") for d in comp_fechas],
+                            y=comp_calidad,
+                            name=f"Escenario: {scenario_name}",
+                            line=dict(color=color, width=2, dash='dot'),
+                            hovertemplate=f"%{{y:.1f}}%<extra>{scenario_name}</extra>",
+                        )
+                    )
+                except Exception as e:
+                    st.warning(f"Error calculando escenario '{scenario_name}': {str(e)}")
 
     # Add phase lines
     for fase, (start, end) in scenario_windows.items():
