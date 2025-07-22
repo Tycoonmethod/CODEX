@@ -589,21 +589,23 @@ try:
     with col3:
         # Create gauge chart for health score
         fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
+            mode="gauge+number",
             value=health_score,
-            delta={'reference': baseline_health_score},
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "🏥 Salud General"},
+            title={'text': "🏥 Salud General", 'font': {'size': 12}},
             gauge={
-                'axis': {'range': [None, 100]},
+                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
                 'bar': {'color': "darkblue"},
+                'bgcolor': "white",
+                'borderwidth': 2,
+                'bordercolor': "gray",
                 'steps': [
-                    {'range': [0, HEALTH_THRESHOLDS['critical']], 'color': "lightgray"},
+                    {'range': [0, HEALTH_THRESHOLDS['critical']], 'color': "red"},
                     {'range': [HEALTH_THRESHOLDS['critical'], HEALTH_THRESHOLDS['warning']], 'color': "yellow"},
                     {'range': [HEALTH_THRESHOLDS['warning'], 100], 'color': "green"}
                 ],
                 'threshold': {
-                    'line': {'color': "red", 'width': 4},
+                    'line': {'color': "red", 'width': 3},
                     'thickness': 0.75,
                     'value': HEALTH_THRESHOLDS['critical']
                 }
@@ -611,12 +613,14 @@ try:
         ))
         
         fig_gauge.update_layout(
-            height=200,
-            margin=dict(t=30, b=0, l=0, r=0),
-            font={'size': 12}
+            height=150,
+            margin=dict(t=20, b=20, l=20, r=20),
+            font={'size': 10},
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
         )
         
-        st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': False}, height=150)
     
 except Exception as e:
     st.error(f"Error calculando KPIs: {str(e)}")
