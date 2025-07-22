@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, time as dt_time, timedelta
 import traceback
 from translations import TEXT, LANGUAGES
 from styles import (
@@ -187,7 +187,7 @@ def to_dt(date_obj):
         if isinstance(date_obj, (str, np.datetime64)):
             return pd.to_datetime(date_obj).to_pydatetime()
         if isinstance(date_obj, date) and not isinstance(date_obj, datetime):
-            return datetime.combine(date_obj, time.min)
+            return datetime.combine(date_obj, dt_time.min)
         if isinstance(date_obj, datetime):
             return date_obj
         return pd.to_datetime(date_obj).to_pydatetime()
@@ -664,7 +664,7 @@ def safe_get_datetime(date_obj):
         if isinstance(date_obj, (str, np.datetime64)):
             return pd.to_datetime(date_obj).to_pydatetime()
         if isinstance(date_obj, date) and not isinstance(date_obj, datetime):
-            return datetime.combine(date_obj, time.min)
+            return datetime.combine(date_obj, dt_time.min)
         if isinstance(date_obj, datetime):
             return date_obj
         return pd.to_datetime(date_obj).to_pydatetime()
@@ -960,7 +960,7 @@ elif st.session_state.selected_page == "modelo":
                     golive_date = datetime(2025, 11, 3)
                     timeline_x = safe_get_index(timeline_df).astype(np.int64) // 10**9
                     baseline_x = safe_get_index(baseline_df).astype(np.int64) // 10**9
-                    golive_x = datetime.combine(golive_date.date(), time.min).timestamp()
+                    golive_x = datetime.combine(golive_date.date(), dt_time.min).timestamp()
                     
                     timeline_quality = safe_get_array(timeline_df, 'total_quality')
                     baseline_quality = safe_get_array(baseline_df, 'total_quality')
@@ -1076,7 +1076,7 @@ elif st.session_state.selected_page == "modelo":
                         baseline_x = safe_get_index(baseline_df).astype(np.int64) // 10**9
                         golive_x = datetime.combine(
                             golive_date if isinstance(golive_date, date) else golive_date.date(),
-                            time.min
+                            dt_time.min
                         ).timestamp()
                         
                         # Get quality values as numpy arrays
