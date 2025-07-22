@@ -367,69 +367,36 @@ st.markdown(
 
 
 # --- State Initialization (Robust, In-Page) ---
-def initialize_state():
-    today = datetime.combine(datetime.now().date(), time.min)
-    migration_end = datetime(2025, 8, 31)
-    migration_duration = (migration_end - today).days
-
-    defaults = {
-        "lang": "es",
-        "project_name": "Proyecto Go-Live 2025",
-        "sponsor": "CEO",
-        "budget_total": 2000000,
-        "budget_used": 75,
-        "team_size": 25,
-        "uat_start": datetime(2025, 7, 8),
-        "uat_end": datetime(2025, 7, 31),
-        "migration_start": today,
-        "migration_end": migration_end,
-        "e2e_start": datetime(2025, 9, 1),
-        "e2e_end": datetime(2025, 9, 30),
-        "training_start": datetime(2025, 10, 1),
-        "training_end": datetime(2025, 10, 31),
-        "pro_start": datetime(2025, 10, 15),
-        "pro_end": datetime(2025, 10, 28),
-        "hypercare_start": datetime(2025, 10, 29),
-        "hypercare_end": datetime(2025, 11, 28),
-        "golive_days": 6,
+# Initialize risk values for each phase
+if "risk_values" not in st.session_state:
+    st.session_state.risk_values = {
+        'UAT': 0,
+        'Migration': 0,
+        'E2E': 0,
+        'Training': 0,
+        'PRO': 0,
+        'Hypercare': 0
     }
-    
-    # Initialize risk values for each phase
-    if "risk_values" not in st.session_state:
-        st.session_state.risk_values = {
-            'UAT': 0,
-            'Migration': 0,
-            'E2E': 0,
-            'Training': 0,
-            'PRO': 0,
-            'Hypercare': 0
-        }
-    
-    # Initialize health score parameters
-    if "budget_consumed" not in st.session_state:
-        st.session_state.budget_consumed = 100  # Default to 100%
-    if "external_risks" not in st.session_state:
-        st.session_state.external_risks = 0  # Default to 0%
-    
-    # Initialize delay reabsorption parameters
-    if "reabsorcion_e2e" not in st.session_state:
-        st.session_state.reabsorcion_e2e = 0  # Default to 0%
-    if "reabsorcion_training" not in st.session_state:
-        st.session_state.reabsorcion_training = 0  # Default to 0%
-    
-    # Initialize scenario management
-    if "scenarios" not in st.session_state:
-        st.session_state.scenarios = {}
-    if "compare_scenarios" not in st.session_state:
-        st.session_state.compare_scenarios = []
-    if "scenario_name" not in st.session_state:
-        st.session_state.scenario_name = ""
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
 
+# Initialize health score parameters
+if "budget_consumed" not in st.session_state:
+    st.session_state.budget_consumed = 100  # Default to 100%
+if "external_risks" not in st.session_state:
+    st.session_state.external_risks = 0  # Default to 0%
 
-initialize_state()
+# Initialize delay reabsorption parameters
+if "reabsorcion_e2e" not in st.session_state:
+    st.session_state.reabsorcion_e2e = 0  # Default to 0%
+if "reabsorcion_training" not in st.session_state:
+    st.session_state.reabsorcion_training = 0  # Default to 0%
+
+# Initialize scenario management
+if "scenarios" not in st.session_state:
+    st.session_state.scenarios = {}
+if "compare_scenarios" not in st.session_state:
+    st.session_state.compare_scenarios = []
+if "scenario_name" not in st.session_state:
+    st.session_state.scenario_name = ""
 
 # --------------------------------------------------
 # Asegurar que 'lang' siempre está definido
