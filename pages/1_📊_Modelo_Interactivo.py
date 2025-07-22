@@ -31,9 +31,10 @@ DELAY_PENALTY_FACTORS = {
     "Hypercare": 0.005   # 0.5%
 }
 
-def quality_model_econometric(params):
+def quality_model_econometric(params, risk_params=None):
     """
     Modelo econométrico mejorado donde Migration es verdaderamente crítica
+    Incluye factores de riesgo por fase
     """
     # Extraer porcentajes
     uat_pct = params["UAT"]
@@ -52,6 +53,39 @@ def quality_model_econometric(params):
         bloqueo_factor = migration_factor * 0.6  # Reducción severa
         e2e_pct = e2e_pct * bloqueo_factor
         training_pct = training_pct * bloqueo_factor
+
+    # Aplicar factores de riesgo si están disponibles
+    if risk_params:
+        # Risk impact factors for each phase (higher = more sensitive to risk)
+        risk_impact_factors = {
+            'Migration': 0.40,  # Most sensitive
+            'PRO': 0.35,       # Second most sensitive
+            'UAT': 0.25,       # Medium-high sensitivity
+            'E2E': 0.20,       # Medium sensitivity
+            'Training': 0.20,  # Medium sensitivity
+            'Hypercare': 0.15  # Least sensitive
+        }
+        
+        # Apply risk impact to each phase
+        for phase in ['UAT', 'Migration', 'E2E', 'Training', 'PRO', 'Hypercare']:
+            if phase in risk_params and risk_params[phase] > 0:
+                risk_factor = risk_params[phase] / 100
+                risk_impact = risk_factor * risk_factor  # Quadratic scaling
+                phase_risk_factor = risk_impact_factors.get(phase, 0.20)
+                
+                # Reduce the phase completion based on risk
+                if phase == 'UAT':
+                    uat_pct *= (1 - risk_impact * phase_risk_factor)
+                elif phase == 'Migration':
+                    migration_pct *= (1 - risk_impact * phase_risk_factor)
+                elif phase == 'E2E':
+                    e2e_pct *= (1 - risk_impact * phase_risk_factor)
+                elif phase == 'Training':
+                    training_pct *= (1 - risk_impact * phase_risk_factor)
+                elif phase == 'PRO':
+                    pro_pct *= (1 - risk_impact * phase_risk_factor)
+                elif phase == 'Hypercare':
+                    hypercare_pct *= (1 - risk_impact * phase_risk_factor)
 
     # Modelo con Migration como fase crítica (corregido para incluir PRO)
     valor_original = (
@@ -212,7 +246,7 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                 )
                 params[fase] = (pct / 100) * penalty_factors[fase]
 
-            calidad = quality_model_econometric(params)
+            calidad = quality_model_econometric(params, st.session_state.risk_values)
             calidades.append(calidad)
 
         end_dates = {fase: effective_windows[fase][1] for fase in baseline_windows}
@@ -299,6 +333,17 @@ def initialize_state():
         "hypercare_end": datetime(2025, 11, 28),
         "golive_days": 6,
     }
+    
+    # Initialize risk values for each phase
+    if "risk_values" not in st.session_state:
+        st.session_state.risk_values = {
+            'UAT': 0,
+            'Migration': 0,
+            'E2E': 0,
+            'Training': 0,
+            'PRO': 0,
+            'Hypercare': 0
+        }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -346,6 +391,21 @@ with st.sidebar:
             key=f"slider_{fase}",
         )
         scenario_windows[fase] = (start, end)
+    
+    # Risk Inputs Section
+    st.markdown("---")
+    with st.expander("⚠️ Riesgos de Ejecución por Fase", expanded=False):
+        st.markdown("#### Ajusta el nivel de riesgo para cada fase del proyecto")
+        
+        # Create sliders for each phase's risk
+        for phase in ['UAT', 'Migration', 'E2E', 'Training', 'PRO', 'Hypercare']:
+            st.session_state.risk_values[phase] = st.slider(
+                f"Riesgo {phase} (%)",
+                0, 100, 
+                value=st.session_state.risk_values[phase],
+                key=f"risk_slider_{phase}",
+                help=f"Riesgo específico para la fase {phase}. Un riesgo alto degradará la calidad de esta fase y afectará las fases posteriores."
+            )
 
 # Desempaquetar fechas de escenario
 uat_start, uat_end = scenario_windows["UAT"]
