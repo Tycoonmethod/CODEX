@@ -344,6 +344,12 @@ def initialize_state():
             'PRO': 0,
             'Hypercare': 0
         }
+    
+    # Initialize health score parameters
+    if "budget_consumed" not in st.session_state:
+        st.session_state.budget_consumed = 100  # Default to 100%
+    if "external_risks" not in st.session_state:
+        st.session_state.external_risks = 0  # Default to 0%
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -406,6 +412,26 @@ with st.sidebar:
                 key=f"risk_slider_{phase}",
                 help=f"Riesgo específico para la fase {phase}. Un riesgo alto degradará la calidad de esta fase y afectará las fases posteriores."
             )
+    
+    # Health Score Parameters Section
+    with st.expander("🏥 Parámetros de Salud del Proyecto", expanded=False):
+        st.markdown("#### Configura los factores que afectan la salud general del proyecto")
+        
+        st.session_state.budget_consumed = st.slider(
+            "💰 % Presupuesto Consumido",
+            0, 200,
+            value=st.session_state.budget_consumed,
+            key="budget_consumed_slider",
+            help="Porcentaje del presupuesto que se ha consumido. Más de 100% indica sobrecostos."
+        )
+        
+        st.session_state.external_risks = st.slider(
+            "⚠️ Riesgos Externos Agregados",
+            0, 100,
+            value=st.session_state.external_risks,
+            key="external_risks_slider",
+            help="Riesgos externos adicionales que afectan la salud del proyecto (cambios de alcance, problemas técnicos, etc.)."
+        )
 
 # Desempaquetar fechas de escenario
 uat_start, uat_end = scenario_windows["UAT"]
@@ -519,15 +545,16 @@ try:
     
     # 2. Salud General del Proyecto
     from phase_model import calculate_health_score
+    from constants import HEALTH_THRESHOLDS
     current_quality = calidad_esc[-1] if calidad_esc else 0
     baseline_quality_final = calidad_base[-1] if calidad_base else 0
     
-    # Calculate health score with example values
+    # Calculate health score with new parameters
     health_score = calculate_health_score(
         quality=current_quality,
         delay_days=total_delay,
-        budget_pct_used=100,  # Example value
-        sum_risks=sum(st.session_state.risk_values.values()) if hasattr(st.session_state, 'risk_values') else 0
+        budget_pct_used=st.session_state.budget_consumed,
+        sum_risks=st.session_state.external_risks
     )
     
     baseline_health_score = calculate_health_score(
@@ -560,12 +587,36 @@ try:
         )
     
     with col3:
-        st.metric(
-            "🏥 Salud General",
-            f"{health_score:.1f}%",
-            delta=f"{health_delta:.1f}%",
-            help="Puntuación de salud general del proyecto (0-100%)"
+        # Create gauge chart for health score
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=health_score,
+            delta={'reference': baseline_health_score},
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "🏥 Salud General"},
+            gauge={
+                'axis': {'range': [None, 100]},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, HEALTH_THRESHOLDS['critical']], 'color': "lightgray"},
+                    {'range': [HEALTH_THRESHOLDS['critical'], HEALTH_THRESHOLDS['warning']], 'color': "yellow"},
+                    {'range': [HEALTH_THRESHOLDS['warning'], 100], 'color': "green"}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': HEALTH_THRESHOLDS['critical']
+                }
+            }
+        ))
+        
+        fig_gauge.update_layout(
+            height=200,
+            margin=dict(t=30, b=0, l=0, r=0),
+            font={'size': 12}
         )
+        
+        st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': False})
     
 except Exception as e:
     st.error(f"Error calculando KPIs: {str(e)}")
