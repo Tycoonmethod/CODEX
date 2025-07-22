@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
 from datetime import datetime, date, time, timedelta
+import time as time_module
 import traceback
 from translations import TEXT, LANGUAGES
 from styles import (
@@ -130,11 +131,11 @@ def get_completion_pct(
     if isinstance(eval_date, str):
         eval_date = datetime.strptime(eval_date, "%Y-%m-%d")
     if isinstance(start, date) and not isinstance(start, datetime):
-        start = datetime.combine(start, time.min)
+        start = datetime.combine(start, datetime.time.min)
     if isinstance(end, date) and not isinstance(end, datetime):
-        end = datetime.combine(end, time.min)
+        end = datetime.combine(end, datetime.time.min)
     if isinstance(eval_date, date) and not isinstance(eval_date, datetime):
-        eval_date = datetime.combine(eval_date, time.min)
+        eval_date = datetime.combine(eval_date, datetime.time.min)
 
     if eval_date < start:
         return 0.0
@@ -167,7 +168,7 @@ def to_dt(x):
     if isinstance(x, datetime):
         return x
     if isinstance(x, date):
-        return datetime.combine(x, time.min)
+        return datetime.combine(x, datetime.time.min)
     if isinstance(x, (int, float)):
         return datetime.fromtimestamp(x)
     return x
@@ -182,9 +183,9 @@ def get_days_between(start_date, end_date):
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d")
     if isinstance(start_date, date) and not isinstance(start_date, datetime):
-        start_date = datetime.combine(start_date, time.min)
+        start_date = datetime.combine(start_date, datetime.time.min)
     if isinstance(end_date, date) and not isinstance(end_date, datetime):
-        end_date = datetime.combine(end_date, time.min)
+        end_date = datetime.combine(end_date, datetime.time.min)
     return (end_date - start_date).days
 
 
@@ -195,7 +196,7 @@ def add_days(base_date, days):
     if isinstance(base_date, str):
         base_date = datetime.strptime(base_date, "%Y-%m-%d")
     if isinstance(base_date, date) and not isinstance(base_date, datetime):
-        base_date = datetime.combine(base_date, time.min)
+        base_date = datetime.combine(base_date, datetime.time.min)
     return base_date + timedelta(days=days)
 
 
@@ -579,15 +580,14 @@ with st.sidebar:
         # Información adicional de diagnóstico
         st.markdown("#### Diagnóstico de Rendimiento")
         if st.button("📊 Medir Tiempo de Ejecución", key="debug_performance"):
-            import time
-            start_time = time.time()
+            start_time = time_module.time()
             
             # Simular ejecución del modelo
             fechas_base, calidad_base, _, _ = construir_cronograma_seguro(
                 sim_windows=baseline_windows
             )
             
-            end_time = time.time()
+            end_time = time_module.time()
             execution_time = end_time - start_time
             
             st.success(f"⏱️ Tiempo de ejecución del modelo: {execution_time:.3f} segundos")
@@ -670,8 +670,7 @@ baseline_fechas = {
 }
 
 # Construir cronograma baseline (sin penalizaciones)
-import time
-start_time = time.time()
+start_time = time_module.time()
 
 fechas_base, calidad_base, _, _ = construir_cronograma_seguro(
     sim_windows=baseline_windows
@@ -683,7 +682,7 @@ fechas_esc, calidad_esc, delays_esc, end_dates_esc = construir_cronograma_seguro
     penalty_baseline=baseline_windows
 )
 
-end_time = time.time()
+end_time = time_module.time()
 execution_time = end_time - start_time
 
 # Mostrar tiempo de ejecución si es significativo
