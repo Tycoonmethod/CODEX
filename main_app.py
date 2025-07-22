@@ -943,6 +943,84 @@ elif st.session_state.selected_page == "modelo":
                     if name in st.session_state.scenarios
                 }
                 
+                # --- KPIs Panel ---
+                st.markdown("### 📊 KPIs del Proyecto")
+                
+                # Calculate KPIs
+                try:
+                    # 1. Calidad Go-Live
+                    golive_date = datetime(2025, 11, 3)
+                    timeline_x = safe_get_index(timeline_df).astype(np.int64) // 10**9
+                    baseline_x = safe_get_index(baseline_df).astype(np.int64) // 10**9
+                    golive_x = datetime.combine(golive_date.date(), time.min).timestamp()
+                    
+                    timeline_quality = safe_get_array(timeline_df, 'total_quality')
+                    baseline_quality = safe_get_array(baseline_df, 'total_quality')
+                    
+                    golive_quality = safe_interpolate(golive_x, timeline_x, timeline_quality)
+                    baseline_golive_quality = safe_interpolate(golive_x, baseline_x, baseline_quality)
+                    quality_delta = golive_quality - baseline_golive_quality
+                    
+                    # 2. Retraso Total del Proyecto
+                    project_end = safe_get_index_value(safe_get_index(timeline_df), 'max')
+                    baseline_end = safe_get_index_value(safe_get_index(baseline_df), 'max')
+                    total_delay = (project_end - baseline_end).days
+                    
+                    # 3. Salud General del Proyecto
+                    from phase_model import calculate_health_score
+                    current_quality = timeline_df['total_quality'].iloc[-1]
+                    baseline_quality_final = baseline_df['total_quality'].iloc[-1]
+                    
+                    # Calculate health score with example values
+                    health_score = calculate_health_score(
+                        quality=current_quality,
+                        delay_days=total_delay,
+                        budget_pct_used=100,  # Example value
+                        sum_risks=sum_risks
+                    )
+                    
+                    baseline_health_score = calculate_health_score(
+                        quality=baseline_quality_final,
+                        delay_days=0,
+                        budget_pct_used=100,
+                        sum_risks=0
+                    )
+                    
+                    health_delta = health_score - baseline_health_score
+                    
+                    # Display KPIs in 3 columns
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric(
+                            "🎯 Calidad Go-Live",
+                            f"{golive_quality:.1f}%",
+                            delta=f"{quality_delta:.1f}%",
+                            help="Calidad del proyecto en la fecha de Go-Live (3-Nov-2025)"
+                        )
+                    
+                    with col2:
+                        st.metric(
+                            "⏰ Retraso Total",
+                            f"{total_delay} días",
+                            delta=f"{total_delay} días",
+                            delta_color="inverse",
+                            help="Diferencia en días entre la fecha final del escenario y el baseline"
+                        )
+                    
+                    with col3:
+                        st.metric(
+                            "🏥 Salud General",
+                            f"{health_score:.1f}%",
+                            delta=f"{health_delta:.1f}%",
+                            help="Puntuación de salud general del proyecto (0-100%)"
+                        )
+                    
+                except Exception as e:
+                    st.error(f"Error calculando KPIs: {str(e)}")
+                
+                st.markdown("---")
+                
                 # Display quality evolution plot
                 st.markdown("### 📈 Evolución de la Calidad del Proyecto")
                 timeline_fig = plot_quality_evolution(results, comparison_scenarios)
