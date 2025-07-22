@@ -199,6 +199,7 @@ def add_days(base_date, days):
     return base_date + timedelta(days=days)
 
 
+@st.cache_data
 def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
     """
     Construye el cronograma extendiendo el horizonte temporal para encontrar la calidad objetivo.
@@ -367,6 +368,10 @@ st.markdown(
 
 
 # --- State Initialization (Robust, In-Page) ---
+# Initialize scenario selection (CRITICAL FIX)
+if "escenario" not in st.session_state:
+    st.session_state.escenario = "baseline"
+
 # Initialize risk values for each phase
 if "risk_values" not in st.session_state:
     st.session_state.risk_values = {
@@ -564,6 +569,32 @@ with st.sidebar:
                 
                 st.markdown("---")
 
+    # --- Vista de Depuración (CRITICAL ADDITION) ---
+    with st.expander("🔧 Vista de Depuración de Estado", expanded=False):
+        st.markdown("#### Estado Actual de la Sesión")
+        st.json(st.session_state)
+        
+        # Información adicional de diagnóstico
+        st.markdown("#### Diagnóstico de Rendimiento")
+        if st.button("📊 Medir Tiempo de Ejecución", key="debug_performance"):
+            import time
+            start_time = time.time()
+            
+            # Simular ejecución del modelo
+            fechas_base, calidad_base, _, _ = construir_cronograma_seguro(
+                sim_windows=baseline_windows
+            )
+            
+            end_time = time.time()
+            execution_time = end_time - start_time
+            
+            st.success(f"⏱️ Tiempo de ejecución del modelo: {execution_time:.3f} segundos")
+            
+            if execution_time > 2.0:
+                st.warning("⚠️ El modelo puede estar tardando más de lo esperado. Considera optimizar.")
+            else:
+                st.info("✅ Rendimiento del modelo dentro de parámetros normales.")
+
 # Desempaquetar fechas de escenario
 uat_start, uat_end = scenario_windows["UAT"]
 mig_start, mig_end = scenario_windows["Migration"]
@@ -619,9 +650,9 @@ baseline_ranges = {
         "label": "PRO (Baseline: 1-Oct → 30-Oct)",
     },
     "Hypercare": {
-        "start": datetime(2025, 11, 4),
+        "start": datetime(2025, 11, 3),
         "end": datetime(2025, 12, 3),
-        "label": "Hypercare (Baseline: 4-Nov → 3-Dic)",
+        "label": "Hypercare (Baseline: 3-Nov → 3-Dic)",
     },
 }
 
@@ -637,6 +668,9 @@ baseline_fechas = {
 }
 
 # Construir cronograma baseline (sin penalizaciones)
+import time
+start_time = time.time()
+
 fechas_base, calidad_base, _, _ = construir_cronograma_seguro(
     sim_windows=baseline_windows
 )
@@ -646,6 +680,13 @@ fechas_esc, calidad_esc, delays_esc, end_dates_esc = construir_cronograma_seguro
     sim_windows=scenario_windows, 
     penalty_baseline=baseline_windows
 )
+
+end_time = time.time()
+execution_time = end_time - start_time
+
+# Mostrar tiempo de ejecución si es significativo
+if execution_time > 1.0:
+    st.info(f"⏱️ Tiempo de cálculo del modelo: {execution_time:.2f} segundos")
 
 # --- PUNTO: interpolar calidad en Go-Live ---
 go_live_date = datetime(2025, 11, 3)
