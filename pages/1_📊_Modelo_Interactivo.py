@@ -1015,6 +1015,7 @@ with st.sidebar:
                 new_golive_date = fechas_ideal[indices[0]]
                 # Guardar la fecha sugerida en el estado de la sesión para que el gráfico la pueda usar
                 st.session_state.suggested_golive_date = new_golive_date
+                st.rerun()  # <--- AÑADE ESTA LÍNEA
                 st.success(f"💡 **Fecha sugerida: {new_golive_date.strftime('%d-%b-%Y')}** (visualizada en el gráfico)")
             else:
                 max_quality = quality_array[-1]
