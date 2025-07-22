@@ -206,43 +206,78 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
     try:
         effective_windows = {k: v for k, v in sim_windows.items()}
 
-        # Propagar delays en cascada con reabsorción, ya que es la mecánica del proyecto.
+        # Propagar delays en cascada con reabsorción aditiva
         dependencies = {
             "Migration": "UAT", "E2E": "Migration", "Training": "E2E",
             "PRO": "E2E", "Hypercare": "PRO"
         }
         
-        # Calcular delays acumulados para aplicar reabsorción
-        delays_acumulados = {}
+        # Guardar fechas originales para cálculos de duración
+        original_windows = {k: v for k, v in sim_windows.items()}
         
         for phase, predecessor in dependencies.items():
             predecessor_end = effective_windows[predecessor][1]
             intended_start = effective_windows[phase][0]
             
-            # Calcular el delay que llega a esta fase
-            delay_propagado = max(0, (predecessor_end - intended_start).days)
-            
-            # Aplicar reabsorción según la fase
-            if phase == "E2E":
-                reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
-                delay_propagado_a_e2e = delay_propagado * (1 - reabsorcion_e2e_pct)
-                actual_start = intended_start + timedelta(days=delay_propagado_a_e2e)
-                delays_acumulados["E2E"] = delay_propagado_a_e2e
-            elif phase == "Training":
-                # El delay que llega a Training es el que queda después de la reabsorción de E2E
-                delay_e2e = delays_acumulados.get("E2E", 0)
-                reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
-                delay_propagado_a_training = delay_e2e * (1 - reabsorcion_training_pct)
-                actual_start = intended_start + timedelta(days=delay_propagado_a_training)
-                delays_acumulados["Training"] = delay_propagado_a_training
-            else:
-                # Para otras fases, aplicar delay normal sin reabsorción
+            if phase == "Migration":
+                # Migration se calcula normalmente
                 actual_start = max(intended_start, predecessor_end + timedelta(days=1))
-                delays_acumulados[phase] = delay_propagado
+                duration = (effective_windows[phase][1] - intended_start).days
+                actual_end = actual_start + timedelta(days=duration)
+                effective_windows[phase] = (actual_start, actual_end)
             
-            duration = (effective_windows[phase][1] - intended_start).days
-            actual_end = actual_start + timedelta(days=duration)
-            effective_windows[phase] = (actual_start, actual_end)
+            elif phase == "E2E":
+                # --- INICIO DEL NUEVO BLOQUE DE LÓGICA ---
+                # 1. Obtenemos el delay original de Migration, que es la fuente de los retrasos.
+                mig_end = effective_windows["Migration"][1]
+                dl = baseline_windows  # baseline_windows es el penalty_baseline
+                delay_mig = max(0, (mig_end - dl["Migration"][1]).days)
+                
+                # 2. Leemos los porcentajes de reabsorción desde los sliders.
+                reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
+                reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
+                
+                # 3. Calculamos cuántos días se reabsorben en total.
+                dias_reabsorbidos_e2e = delay_mig * reabsorcion_e2e_pct
+                dias_reabsorbidos_training = delay_mig * reabsorcion_training_pct  # Se calcula sobre el delay original
+                
+                # 4. Calculamos los delays propagados DESPUÉS de la reabsorción.
+                delay_propagado_a_e2e = delay_mig - dias_reabsorbidos_e2e
+                delay_propagado_a_training = delay_mig - dias_reabsorbidos_training
+                
+                # 5. Calculamos las nuevas fechas de inicio y fin de las fases afectadas.
+                e2e_start = mig_end
+                e2e_start0 = original_windows["E2E"][0]
+                e2e_end0 = original_windows["E2E"][1]
+                e2e_duration = (e2e_end0 - e2e_start0).days - dias_reabsorbidos_e2e
+                e2e_end = e2e_start + timedelta(days=max(0, e2e_duration))
+                effective_windows["E2E"] = (e2e_start, e2e_end)
+                
+                train_start = e2e_end
+                train_start0 = original_windows["Training"][0]
+                train_end0 = original_windows["Training"][1]
+                train_duration = (train_end0 - train_start0).days - dias_reabsorbidos_training
+                train_end = train_start + timedelta(days=max(0, train_duration))
+                effective_windows["Training"] = (train_start, train_end)
+                
+                # Calcular delays específicos para E2E y Training después de la reabsorción
+                delays["E2E"] = max(0, (e2e_end - dl["E2E"][1]).days)
+                delays["Training"] = max(0, (train_end - dl["Training"][1]).days)
+                # --- FIN DEL NUEVO BLOQUE DE LÓGICA ---
+            
+            elif phase == "PRO":
+                # PRO depende de E2E (ya calculado)
+                actual_start = max(intended_start, effective_windows["E2E"][1] + timedelta(days=1))
+                duration = (effective_windows[phase][1] - intended_start).days
+                actual_end = actual_start + timedelta(days=duration)
+                effective_windows[phase] = (actual_start, actual_end)
+            
+            elif phase == "Hypercare":
+                # Hypercare depende de PRO
+                actual_start = max(intended_start, effective_windows["PRO"][1] + timedelta(days=1))
+                duration = (effective_windows[phase][1] - intended_start).days
+                actual_end = actual_start + timedelta(days=duration)
+                effective_windows[phase] = (actual_start, actual_end)
 
         # Calcular delays y penalizaciones SOLO si se proporciona un baseline.
         delays = {}
@@ -453,7 +488,7 @@ with st.sidebar:
             )
     
     # Delay Reabsorption Section
-    with st.expander("🔄 Fattori di Riassorbimento dei Ritardi", expanded=False):
+    with st.expander("🔄 Factores de Reabsorción de Retrasos", expanded=False):
         st.markdown("#### Configura la capacidad de reabsorción de delays por fase")
         
         st.slider(
@@ -694,6 +729,20 @@ try:
     )
     
     health_delta = health_score - baseline_health_score
+    
+    # --- INICIO DEL BLOQUE DE CORRECCIÓN VISUAL ---
+    # Encontrar la primera fecha donde hay un cambio real
+    primera_fecha_impacto = None
+    for fase in ["UAT", "Migration", "E2E", "Training", "PRO", "Hypercare"]:
+        if scenario_windows[fase][0] != baseline_windows[fase][0] or scenario_windows[fase][1] != baseline_windows[fase][1]:
+            primera_fecha_impacto = min(scenario_windows[fase][0], baseline_windows[fase][0])
+            break
+
+    # Si hay un punto de impacto, forzar que la curva del escenario sea igual a la del baseline hasta ese punto.
+    if primera_fecha_impacto:
+        df_baseline_interp = pd.DataFrame(index=fechas_esc, data={'baseline_quality': np.interp(fechas_esc.astype(np.int64), fechas_base.astype(np.int64), calidad_base)})
+        calidad_esc = np.where(fechas_esc < primera_fecha_impacto, df_baseline_interp['baseline_quality'], calidad_esc)
+    # --- FIN DEL BLOQUE DE CORRECCIÓN VISUAL ---
     
     # Display KPIs in 3 columns
     col1, col2, col3 = st.columns(3)
