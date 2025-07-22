@@ -17,48 +17,46 @@ from styles import (
 import pulp
 from phase_model import calculate_project_timeline, PHASE_WEIGHTS
 
+# --- INICIO: NUEVA LÓGICA DE INICIALIZACIÓN ---
+
+# Single Source of Truth for Baseline Dates
+BASELINE_DATES = {
+    "UAT": {"start": datetime(2025, 7, 8), "end": datetime(2025, 7, 31)},
+    "Migration": {"start": datetime(2025, 8, 1), "end": datetime(2025, 8, 31)},
+    "E2E": {"start": datetime(2025, 9, 1), "end": datetime(2025, 9, 30)},
+    "Training": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 31)},
+    "PRO": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 30)},
+    "Hypercare": {"start": datetime(2025, 11, 3), "end": datetime(2025, 12, 3)},
+}
+
+def initialize_session_state():
+    """Initializes all necessary session state variables in a single place."""
+    if "state_initialized" not in st.session_state:
+        st.session_state.state_initialized = True
+        st.session_state.lang = "es"
+        st.session_state.selected_page = "home"
+        st.session_state.scenarios = {}
+        st.session_state.compare_scenarios = []
+        st.session_state.risk_values = {phase: 0 for phase in BASELINE_DATES}
+
+        # Initialize slider values from the single source of truth
+        for phase, dates in BASELINE_DATES.items():
+            st.session_state[f"slider_{phase}"] = (dates["start"], dates["end"])
+
+        # Set the baseline windows for calculation
+        st.session_state.baseline_windows = BASELINE_DATES
+
+initialize_session_state()
+
+# --- FIN: NUEVA LÓGICA DE INICIALIZACIÓN ---
+
 # --- UI Configuration ---
 st.set_page_config(page_title="Modelo Go-Live", layout="wide")
 
 # Inject custom CSS
 inject_custom_css()
 
-# --- State Initialization ---
-def initialize_state():
-    if "selected_page" not in st.session_state:
-        st.session_state.selected_page = "home"
-    if "lang" not in st.session_state:
-        st.session_state.lang = "es"
-    if "saved_scenarios" not in st.session_state:
-        st.session_state.saved_scenarios = {}
-    if "compare_scenarios" not in st.session_state:
-        st.session_state.compare_scenarios = []  # Initialize as empty list
-    if "scenarios" not in st.session_state:
-        st.session_state.scenarios = {}
-    if "scenario_name" not in st.session_state:
-        st.session_state.scenario_name = ""
-    if "scenario_windows" not in st.session_state:
-        st.session_state.scenario_windows = {}
-    if "baseline_windows" not in st.session_state:
-        st.session_state.baseline_windows = {}
-    # Initialize risk values for each phase
-    if "risk_values" not in st.session_state:
-        st.session_state.risk_values = {
-            'UAT': 0,
-            'Migration': 0,
-            'E2E': 0,
-            'Training': 0,
-            'PRO': 0,
-            'Hypercare': 0
-        }
-    
-    # Initialize health score parameters
-    if "budget_consumed" not in st.session_state:
-        st.session_state.budget_consumed = 100  # Default to 100%
-    if "external_risks" not in st.session_state:
-        st.session_state.external_risks = 0  # Default to 0%
 
-initialize_state()
 
 # --- Language Selector ---
 _, col2 = st.columns([0.85, 0.15])
@@ -517,15 +515,7 @@ def toggle_scenario_comparison(scenario_name):
 CAL_START = datetime(2025, 7, 1)
 CAL_END = datetime(2026, 1, 1)
 
-# Baselines fijos de cada fase
-baseline_windows = {
-    "UAT": (datetime(2025, 7, 8), datetime(2025, 7, 31)),
-    "Migration": (datetime(2025, 8, 1), datetime(2025, 8, 31)),
-    "E2E": (datetime(2025, 9, 1), datetime(2025, 9, 30)),
-    "Training": (datetime(2025, 10, 1), datetime(2025, 10, 31)),
-    "PRO": (datetime(2025, 10, 1), datetime(2025, 10, 30)),
-    "Hypercare": (datetime(2025, 11, 3), datetime(2025, 12, 3)),
-}
+
 
 # Baseline durations for preventing reabsorption
 baseline_days = {
@@ -757,10 +747,10 @@ elif st.session_state.selected_page == "modelo":
     with st.sidebar:
         # Botón Reset para restaurar valores baseline
         if st.button("🔄 Reset a Baseline", use_container_width=True, type="secondary"):
-            # Resetear todos los sliders a sus valores baseline
-            for fase in baseline_windows.keys():
-                if f"slider_{fase}" in st.session_state:
-                    del st.session_state[f"slider_{fase}"]
+                    # Resetear todos los sliders a sus valores baseline
+        for fase in BASELINE_DATES.keys():
+            if f"slider_{fase}" in st.session_state:
+                del st.session_state[f"slider_{fase}"]
             st.rerun()
 
         # External Risk Factors
@@ -844,7 +834,7 @@ elif st.session_state.selected_page == "modelo":
                 current_scenario = {
                     "sliders": {
                         fase: st.session_state[f"slider_{fase}"]
-                        for fase in baseline_windows.keys()
+                        for fase in BASELINE_DATES.keys()
                     },
                     "risks": dict(st.session_state.external_risks),
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -885,15 +875,16 @@ elif st.session_state.selected_page == "modelo":
 
         st.header("Configuración de Fases")
         scenario_windows = {}
-        for fase, (b_start, b_end) in baseline_windows.items():
+        for fase, dates in BASELINE_DATES.items():
+            b_start, b_end = dates["start"], dates["end"]
             lbl = f"{fase} (Baseline: {b_start.strftime('%d-%b')} → {b_end.strftime('%d-%b')})"
+            # El slider ahora lee su valor por defecto desde la 'key' en st.session_state
             start, end = st.slider(
                 lbl,
                 min_value=CAL_START,
                 max_value=CAL_END,
-                value=(b_start, b_end),
-                format="YYYY-MM-DD",
                 key=f"slider_{fase}",
+                format="YYYY-MM-DD"
             )
             scenario_windows[fase] = (start, end)
 
@@ -915,16 +906,7 @@ elif st.session_state.selected_page == "modelo":
         "Hypercare": {"start": hyper_start, "end": hyper_end}
     }
 
-    # Initialize baseline_windows if not already set
-    if not st.session_state.baseline_windows:
-        st.session_state.baseline_windows = {
-            "UAT": {"start": datetime(2025, 7, 8), "end": datetime(2025, 7, 31)},
-            "Migration": {"start": datetime(2025, 8, 1), "end": datetime(2025, 8, 31)},
-            "E2E": {"start": datetime(2025, 9, 1), "end": datetime(2025, 9, 30)},
-            "Training": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 31)},
-            "PRO": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 30)},
-            "Hypercare": {"start": datetime(2025, 11, 3), "end": datetime(2025, 12, 3)}
-        }
+
 
     # Calculate sum of risks for conditional bands
     sum_risks = (
