@@ -206,15 +206,40 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
     try:
         effective_windows = {k: v for k, v in sim_windows.items()}
 
-        # Propagar delays en cascada, ya que es la mecánica del proyecto.
+        # Propagar delays en cascada con reabsorción, ya que es la mecánica del proyecto.
         dependencies = {
             "Migration": "UAT", "E2E": "Migration", "Training": "E2E",
             "PRO": "E2E", "Hypercare": "PRO"
         }
+        
+        # Calcular delays acumulados para aplicar reabsorción
+        delays_acumulados = {}
+        
         for phase, predecessor in dependencies.items():
             predecessor_end = effective_windows[predecessor][1]
             intended_start = effective_windows[phase][0]
-            actual_start = max(intended_start, predecessor_end + timedelta(days=1))
+            
+            # Calcular el delay que llega a esta fase
+            delay_propagado = max(0, (predecessor_end - intended_start).days)
+            
+            # Aplicar reabsorción según la fase
+            if phase == "E2E":
+                reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
+                delay_propagado_a_e2e = delay_propagado * (1 - reabsorcion_e2e_pct)
+                actual_start = intended_start + timedelta(days=delay_propagado_a_e2e)
+                delays_acumulados["E2E"] = delay_propagado_a_e2e
+            elif phase == "Training":
+                # El delay que llega a Training es el que queda después de la reabsorción de E2E
+                delay_e2e = delays_acumulados.get("E2E", 0)
+                reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
+                delay_propagado_a_training = delay_e2e * (1 - reabsorcion_training_pct)
+                actual_start = intended_start + timedelta(days=delay_propagado_a_training)
+                delays_acumulados["Training"] = delay_propagado_a_training
+            else:
+                # Para otras fases, aplicar delay normal sin reabsorción
+                actual_start = max(intended_start, predecessor_end + timedelta(days=1))
+                delays_acumulados[phase] = delay_propagado
+            
             duration = (effective_windows[phase][1] - intended_start).days
             actual_end = actual_start + timedelta(days=duration)
             effective_windows[phase] = (actual_start, actual_end)
@@ -351,6 +376,12 @@ def initialize_state():
     if "external_risks" not in st.session_state:
         st.session_state.external_risks = 0  # Default to 0%
     
+    # Initialize delay reabsorption parameters
+    if "reabsorcion_e2e" not in st.session_state:
+        st.session_state.reabsorcion_e2e = 0  # Default to 0%
+    if "reabsorcion_training" not in st.session_state:
+        st.session_state.reabsorcion_training = 0  # Default to 0%
+    
     # Initialize scenario management
     if "scenarios" not in st.session_state:
         st.session_state.scenarios = {}
@@ -421,6 +452,26 @@ with st.sidebar:
                 help=f"Riesgo específico para la fase {phase}. Un riesgo alto degradará la calidad de esta fase y afectará las fases posteriores."
             )
     
+    # Delay Reabsorption Section
+    with st.expander("🔄 Fattori di Riassorbimento dei Ritardi", expanded=False):
+        st.markdown("#### Configura la capacidad de reabsorción de delays por fase")
+        
+        st.session_state.reabsorcion_e2e = st.slider(
+            "Reabsorción de Delay en E2E (%)",
+            0, 100,
+            value=st.session_state.reabsorcion_e2e,
+            key="reabsorcion_e2e",
+            help="Porcentaje del retraso acumulado que el equipo de E2E puede reabsorber."
+        )
+        
+        st.session_state.reabsorcion_training = st.slider(
+            "Reabsorción de Delay en Training (%)",
+            0, 100,
+            value=st.session_state.reabsorcion_training,
+            key="reabsorcion_training",
+            help="Porcentaje del retraso acumulado que el equipo de Training puede reabsorber."
+        )
+    
     # Health Score Parameters Section
     with st.expander("🏥 Parámetros de Salud del Proyecto", expanded=False):
         st.markdown("#### Configura los factores que afectan la salud general del proyecto")
@@ -460,6 +511,8 @@ with st.sidebar:
                     'risks': st.session_state.risk_values.copy(),
                     'budget_consumed': st.session_state.budget_consumed,
                     'external_risks': st.session_state.external_risks,
+                    'reabsorcion_e2e': st.session_state.reabsorcion_e2e,
+                    'reabsorcion_training': st.session_state.reabsorcion_training,
                     'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 st.session_state.scenarios[scenario_name] = current_scenario
@@ -491,6 +544,11 @@ with st.sidebar:
                         st.session_state.risk_values = data['risks'].copy()
                         st.session_state.budget_consumed = data['budget_consumed']
                         st.session_state.external_risks = data['external_risks']
+                        # Load reabsorption parameters if they exist in the saved scenario
+                        if 'reabsorcion_e2e' in data:
+                            st.session_state.reabsorcion_e2e = data['reabsorcion_e2e']
+                        if 'reabsorcion_training' in data:
+                            st.session_state.reabsorcion_training = data['reabsorcion_training']
                         st.success(f"✅ Escenario '{name}' cargado")
                         st.rerun()
                 
