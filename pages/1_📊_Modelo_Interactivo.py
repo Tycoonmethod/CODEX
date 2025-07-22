@@ -206,78 +206,56 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
     try:
         effective_windows = {k: v for k, v in sim_windows.items()}
 
-        # Propagar delays en cascada con reabsorción aditiva
-        dependencies = {
-            "Migration": "UAT", "E2E": "Migration", "Training": "E2E",
-            "PRO": "E2E", "Hypercare": "PRO"
-        }
-        
-        # Guardar fechas originales para cálculos de duración
-        original_windows = {k: v for k, v in sim_windows.items()}
-        
-        # Inicializar delays para evitar UnboundLocalError
+        # --- INICIO DEL NUEVO BLOQUE DE LÓGICA CORREGIDA ---
         delays = {}
         
-        for phase, predecessor in dependencies.items():
-            predecessor_end = effective_windows[predecessor][1]
-            intended_start = effective_windows[phase][0]
-            
-            if phase == "Migration":
-                # Migration se calcula normalmente
-                actual_start = max(intended_start, predecessor_end + timedelta(days=1))
-                duration = (effective_windows[phase][1] - intended_start).days
-                actual_end = actual_start + timedelta(days=duration)
-                effective_windows[phase] = (actual_start, actual_end)
-            
-            elif phase == "E2E":
-                # --- INICIO DEL NUEVO BLOQUE DE LÓGICA ---
-                # 1. Obtenemos el delay original de Migration, la fuente de todos los retrasos.
-                mig_end = effective_windows["Migration"][1]
-                dl = baseline_windows  # baseline_windows es el penalty_baseline
-                delay_mig = max(0, (mig_end - dl["Migration"][1]).days)
-                delays["Migration"] = delay_mig
+        # Extraer fechas de las ventanas de simulación
+        uat_start, uat_end = sim_windows["UAT"]
+        mig_start, mig_end = sim_windows["Migration"]
+        e2e_start0, e2e_end0 = sim_windows["E2E"]
+        train_start0, train_end0 = sim_windows["Training"]
+        pro_start, pro_end = sim_windows["PRO"]
+        hyper_start, hyper_end = sim_windows["Hypercare"]
+        
+        # 1. Calcular el delay inicial de la fase que lo origina (Migration)
+        dl = baseline_windows  # baseline_windows es el penalty_baseline
+        delay_mig = max(0, (mig_end - dl["Migration"][1]).days)
+        delays["Migration"] = delay_mig
 
-                # 2. Leemos los factores de reabsorción desde los sliders.
-                reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
-                reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
+        # 2. Leer los porcentajes de reabsorción
+        reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
+        reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
 
-                # 3. Calculamos cuántos días se reabsorben y el retraso residual.
-                dias_reabsorbidos_total = delay_mig * (reabsorcion_e2e_pct + reabsorcion_training_pct)
-                delay_residual = max(0, delay_mig - dias_reabsorbidos_total)
+        # 3. Calcular los días totales reabsorbidos y el retraso neto que se propagará
+        dias_reabsorbidos = delay_mig * (reabsorcion_e2e_pct + reabsorcion_training_pct)
+        net_delay_propagado = max(0, round(delay_mig - dias_reabsorbidos))
 
-                # 4. Las fechas de E2E y Training se desplazan según el retraso residual.
-                e2e_start = mig_end + timedelta(days=delay_residual)
-                e2e_start0 = original_windows["E2E"][0]
-                e2e_end0 = original_windows["E2E"][1]
-                e2e_duration = (e2e_end0 - e2e_start0).days
-                e2e_end = e2e_start + timedelta(days=e2e_duration)
-                effective_windows["E2E"] = (e2e_start, e2e_end)
+        # 4. Calcular las fechas de inicio y fin de las fases posteriores basándose en el retraso neto
+        # La fecha de fin "efectiva" de Migration es la del baseline + el retraso neto
+        mig_end_efectivo = dl["Migration"][1] + timedelta(days=net_delay_propagado)
 
-                train_start = e2e_end
-                train_start0 = original_windows["Training"][0]
-                train_end0 = original_windows["Training"][1]
-                train_duration = (train_end0 - train_start0).days
-                train_end = train_start + timedelta(days=train_duration)
-                effective_windows["Training"] = (train_start, train_end)
+        # E2E y Training ahora dependen de esta fecha corregida
+        e2e_start = mig_end_efectivo + timedelta(days=1)
+        e2e_duration = (e2e_end0 - e2e_start0).days
+        e2e_end = e2e_start + timedelta(days=e2e_duration)
 
-                # 5. Se actualizan los delays finales para la tabla de diagnóstico.
-                delays["E2E"] = max(0, (e2e_end - dl["E2E"][1]).days)
-                delays["Training"] = max(0, (train_end - dl["Training"][1]).days)
-                # --- FIN DEL NUEVO BLOQUE DE LÓGICA ---
-            
-            elif phase == "PRO":
-                # PRO depende de E2E (ya calculado)
-                actual_start = max(intended_start, effective_windows["E2E"][1] + timedelta(days=1))
-                duration = (effective_windows[phase][1] - intended_start).days
-                actual_end = actual_start + timedelta(days=duration)
-                effective_windows[phase] = (actual_start, actual_end)
-            
-            elif phase == "Hypercare":
-                # Hypercare depende de PRO
-                actual_start = max(intended_start, effective_windows["PRO"][1] + timedelta(days=1))
-                duration = (effective_windows[phase][1] - intended_start).days
-                actual_end = actual_start + timedelta(days=duration)
-                effective_windows[phase] = (actual_start, actual_end)
+        train_start = e2e_end + timedelta(days=1)
+        train_duration = (train_end0 - train_start0).days
+        train_end = train_start + timedelta(days=train_duration)
+
+        # Actualizar las ventanas efectivas para el cálculo de calidad
+        effective_windows = {
+            "UAT": (uat_start, uat_end),
+            "Migration": (mig_start, mig_end),
+            "E2E": (e2e_start, e2e_end),
+            "Training": (train_start, train_end),
+            "PRO": (pro_start, pro_end), # PRO no se ve afectado por la cascada en este modelo
+            "Hypercare": (hyper_start, hyper_end)
+        }
+
+        delays["E2E"] = max(0, (e2e_end - dl["E2E"][1]).days)
+        delays["Training"] = max(0, (train_end - dl["Training"][1]).days)
+        # --- FIN DEL NUEVO BLOQUE DE LÓGICA CORREGIDA ---
 
         # Calcular delays y penalizaciones SOLO si se proporciona un baseline.
         penalty_factors = {fase: 1.0 for fase in baseline_windows.keys()}
