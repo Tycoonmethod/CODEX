@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, time as dt_time, timedelta
 import traceback
 
 # Inicializar fechas por defecto
