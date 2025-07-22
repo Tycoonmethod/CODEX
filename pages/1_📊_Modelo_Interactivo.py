@@ -592,7 +592,7 @@ try:
             mode="gauge+number",
             value=health_score,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "🏥 Salud General", 'font': {'size': 12}},
+            title={'text': "🏥 Health Score", 'font': {'size': 12}},
             gauge={
                 'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
                 'bar': {'color': "darkblue"},
