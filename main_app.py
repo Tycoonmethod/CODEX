@@ -89,16 +89,17 @@ with st.sidebar:
     scenario_name = st.text_input("Nombre del Escenario", key="scenario_name_sidebar")
     
     # Risk Inputs Section
-    st.markdown("### ⚠️ Riesgos de Ejecución")
-    
-    # Create expanders for each phase's risk
-    for phase in ['UAT', 'Migration', 'E2E', 'Training', 'PRO', 'Hypercare']:
-        with st.expander(f"🔍 {phase}"):
+    with st.expander("⚠️ Riesgos de Ejecución por Fase", expanded=False):
+        st.markdown("#### Ajusta el nivel de riesgo para cada fase del proyecto")
+        
+        # Create sliders for each phase's risk
+        for phase in ['UAT', 'Migration', 'E2E', 'Training', 'PRO', 'Hypercare']:
             st.session_state.risk_values[phase] = st.slider(
-                "Riesgo de Ejecución (%)",
+                f"Riesgo {phase} (%)",
                 0, 100, 
                 value=st.session_state.risk_values[phase],
-                help=f"Riesgo específico para la fase {phase}. Un riesgo alto degradará la calidad de esta fase."
+                key=f"risk_slider_{phase}",
+                help=f"Riesgo específico para la fase {phase}. Un riesgo alto degradará la calidad de esta fase y afectará las fases posteriores."
             )
     
     # Save current scenario
