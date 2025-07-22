@@ -215,6 +215,9 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
         # Guardar fechas originales para cálculos de duración
         original_windows = {k: v for k, v in sim_windows.items()}
         
+        # Inicializar delays para evitar UnboundLocalError
+        delays = {}
+        
         for phase, predecessor in dependencies.items():
             predecessor_end = effective_windows[predecessor][1]
             intended_start = effective_windows[phase][0]
@@ -228,39 +231,36 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
             
             elif phase == "E2E":
                 # --- INICIO DEL NUEVO BLOQUE DE LÓGICA ---
-                # 1. Obtenemos el delay original de Migration, que es la fuente de los retrasos.
+                # 1. Obtenemos el delay original de Migration, la fuente de todos los retrasos.
                 mig_end = effective_windows["Migration"][1]
                 dl = baseline_windows  # baseline_windows es el penalty_baseline
                 delay_mig = max(0, (mig_end - dl["Migration"][1]).days)
-                
-                # 2. Leemos los porcentajes de reabsorción desde los sliders.
+                delays["Migration"] = delay_mig
+
+                # 2. Leemos los factores de reabsorción desde los sliders.
                 reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
                 reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
-                
-                # 3. Calculamos cuántos días se reabsorben en total.
-                dias_reabsorbidos_e2e = delay_mig * reabsorcion_e2e_pct
-                dias_reabsorbidos_training = delay_mig * reabsorcion_training_pct  # Se calcula sobre el delay original
-                
-                # 4. Calculamos los delays propagados DESPUÉS de la reabsorción.
-                delay_propagado_a_e2e = delay_mig - dias_reabsorbidos_e2e
-                delay_propagado_a_training = delay_mig - dias_reabsorbidos_training
-                
-                # 5. Calculamos las nuevas fechas de inicio y fin de las fases afectadas.
-                e2e_start = mig_end
+
+                # 3. Calculamos cuántos días se reabsorben y el retraso residual.
+                dias_reabsorbidos_total = delay_mig * (reabsorcion_e2e_pct + reabsorcion_training_pct)
+                delay_residual = max(0, delay_mig - dias_reabsorbidos_total)
+
+                # 4. Las fechas de E2E y Training se desplazan según el retraso residual.
+                e2e_start = mig_end + timedelta(days=delay_residual)
                 e2e_start0 = original_windows["E2E"][0]
                 e2e_end0 = original_windows["E2E"][1]
-                e2e_duration = (e2e_end0 - e2e_start0).days - dias_reabsorbidos_e2e
-                e2e_end = e2e_start + timedelta(days=max(0, e2e_duration))
+                e2e_duration = (e2e_end0 - e2e_start0).days
+                e2e_end = e2e_start + timedelta(days=e2e_duration)
                 effective_windows["E2E"] = (e2e_start, e2e_end)
-                
+
                 train_start = e2e_end
                 train_start0 = original_windows["Training"][0]
                 train_end0 = original_windows["Training"][1]
-                train_duration = (train_end0 - train_start0).days - dias_reabsorbidos_training
-                train_end = train_start + timedelta(days=max(0, train_duration))
+                train_duration = (train_end0 - train_start0).days
+                train_end = train_start + timedelta(days=train_duration)
                 effective_windows["Training"] = (train_start, train_end)
-                
-                # Calcular delays específicos para E2E y Training después de la reabsorción
+
+                # 5. Se actualizan los delays finales para la tabla de diagnóstico.
                 delays["E2E"] = max(0, (e2e_end - dl["E2E"][1]).days)
                 delays["Training"] = max(0, (train_end - dl["Training"][1]).days)
                 # --- FIN DEL NUEVO BLOQUE DE LÓGICA ---
@@ -280,7 +280,6 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                 effective_windows[phase] = (actual_start, actual_end)
 
         # Calcular delays y penalizaciones SOLO si se proporciona un baseline.
-        delays = {}
         penalty_factors = {fase: 1.0 for fase in baseline_windows.keys()}
 
         if penalty_baseline:
