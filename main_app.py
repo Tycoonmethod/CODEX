@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime, date, time as dt_time, timedelta
+import datetime as dt
+from datetime import date, time, timedelta
 import traceback
 from translations import TEXT, LANGUAGES
 from styles import (
@@ -21,12 +22,12 @@ from phase_model import calculate_project_timeline, PHASE_WEIGHTS
 
 # Single Source of Truth for Baseline Dates
 BASELINE_DATES = {
-    "UAT": {"start": datetime(2025, 7, 8), "end": datetime(2025, 7, 31)},
-    "Migration": {"start": datetime(2025, 8, 1), "end": datetime(2025, 8, 31)},
-    "E2E": {"start": datetime(2025, 9, 1), "end": datetime(2025, 9, 30)},
-    "Training": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 31)},
-    "PRO": {"start": datetime(2025, 10, 1), "end": datetime(2025, 10, 30)},
-    "Hypercare": {"start": datetime(2025, 11, 3), "end": datetime(2025, 12, 3)},
+    "UAT": {"start": dt.datetime(2025, 7, 8), "end": dt.datetime(2025, 7, 31)},
+    "Migration": {"start": dt.datetime(2025, 8, 1), "end": dt.datetime(2025, 8, 31)},
+    "E2E": {"start": dt.datetime(2025, 9, 1), "end": dt.datetime(2025, 9, 30)},
+    "Training": {"start": dt.datetime(2025, 10, 1), "end": dt.datetime(2025, 10, 31)},
+    "PRO": {"start": dt.datetime(2025, 10, 1), "end": dt.datetime(2025, 10, 30)},
+    "Hypercare": {"start": dt.datetime(2025, 11, 3), "end": dt.datetime(2025, 12, 3)},
 }
 
 def initialize_session_state():
@@ -135,7 +136,7 @@ with st.sidebar:
             current_scenario = {
                 'sliders': st.session_state.scenario_windows.copy(),
                 'risks': st.session_state.risk_values.copy(),
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                'timestamp': dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             st.session_state.scenarios[scenario_name] = current_scenario
             st.success(f"✅ Escenario '{scenario_name}' guardado")
@@ -186,9 +187,9 @@ def to_dt(date_obj):
     try:
         if isinstance(date_obj, (str, np.datetime64)):
             return pd.to_datetime(date_obj).to_pydatetime()
-        if isinstance(date_obj, date) and not isinstance(date_obj, datetime):
-            return datetime.combine(date_obj, dt_time.min)
-        if isinstance(date_obj, datetime):
+        if isinstance(date_obj, date) and not isinstance(date_obj, dt.datetime):
+            return dt.datetime.combine(date_obj, time.min)
+        if isinstance(date_obj, dt.datetime):
             return date_obj
         return pd.to_datetime(date_obj).to_pydatetime()
     except (ValueError, TypeError):
@@ -512,8 +513,8 @@ def toggle_scenario_comparison(scenario_name):
         st.session_state.compare_scenarios.append(scenario_name)  # Changed from add() to append()
 
 # Rango global donde pueden moverse los sliders
-CAL_START = datetime(2025, 7, 1)
-CAL_END = datetime(2026, 1, 1)
+CAL_START = dt.datetime(2025, 7, 1)
+CAL_END = dt.datetime(2026, 1, 1)
 
 
 
@@ -663,9 +664,9 @@ def safe_get_datetime(date_obj):
             return None
         if isinstance(date_obj, (str, np.datetime64)):
             return pd.to_datetime(date_obj).to_pydatetime()
-        if isinstance(date_obj, date) and not isinstance(date_obj, datetime):
-            return datetime.combine(date_obj, dt_time.min)
-        if isinstance(date_obj, datetime):
+        if isinstance(date_obj, date) and not isinstance(date_obj, dt.datetime):
+            return dt.datetime.combine(date_obj, time.min)
+        if isinstance(date_obj, dt.datetime):
             return date_obj
         return pd.to_datetime(date_obj).to_pydatetime()
     except (ValueError, TypeError):
@@ -837,7 +838,7 @@ elif st.session_state.selected_page == "modelo":
                         for fase in BASELINE_DATES.keys()
                     },
                     "risks": dict(st.session_state.external_risks),
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 st.session_state.saved_scenarios[scenario_name] = current_scenario
                 st.success(f"✅ Escenario '{scenario_name}' guardado exitosamente")
@@ -957,10 +958,10 @@ elif st.session_state.selected_page == "modelo":
                 # Calculate KPIs
                 try:
                     # 1. Calidad Go-Live
-                    golive_date = datetime(2025, 11, 3)
+                    golive_date = dt.datetime(2025, 11, 3)
                     timeline_x = safe_get_index(timeline_df).astype(np.int64) // 10**9
                     baseline_x = safe_get_index(baseline_df).astype(np.int64) // 10**9
-                    golive_x = datetime.combine(golive_date.date(), dt_time.min).timestamp()
+                    golive_x = dt.datetime.combine(golive_date.date(), time.min).timestamp()
                     
                     timeline_quality = safe_get_array(timeline_df, 'total_quality')
                     baseline_quality = safe_get_array(baseline_df, 'total_quality')
@@ -1067,16 +1068,16 @@ elif st.session_state.selected_page == "modelo":
                     st.plotly_chart(waterfall_fig, use_container_width=True)
                 
                 # --- PUNTO: interpolar calidad en Go-Live ---
-                golive_date = datetime(2025, 11, 3)
+                golive_date = dt.datetime(2025, 11, 3)
                 
-                if golive_date and isinstance(golive_date, (datetime, date)):
+                if golive_date and isinstance(golive_date, (dt.datetime, date)):
                     try:
                         # Convert timestamps to float for interpolation
                         timeline_x = safe_get_index(timeline_df).astype(np.int64) // 10**9
                         baseline_x = safe_get_index(baseline_df).astype(np.int64) // 10**9
-                        golive_x = datetime.combine(
+                        golive_x = dt.datetime.combine(
                             golive_date if isinstance(golive_date, date) else golive_date.date(),
-                            dt_time.min
+                            time.min
                         ).timestamp()
                         
                         # Get quality values as numpy arrays

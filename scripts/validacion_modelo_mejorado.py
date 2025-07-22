@@ -4,7 +4,8 @@ Script de validación del modelo econométrico MEJORADO con Migration crítica
 """
 
 import numpy as np
-from datetime import datetime, timedelta
+import datetime as dt
+from datetime import timedelta
 
 
 # --- MODELO MEJORADO CON MIGRATION CRÍTICA ---

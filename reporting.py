@@ -3,7 +3,7 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
-from datetime import datetime
+import datetime as dt
 import plotly.io as pio
 import os
 from PIL import Image
@@ -36,7 +36,7 @@ def generate_pdf_report(project_state):
     
     # Title section
     pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, f'Estado del Proyecto - {datetime.now().strftime("%d/%m/%Y")}', 0, 1, 'C')
+    pdf.cell(0, 10, f'Estado del Proyecto - {dt.datetime.now().strftime("%d/%m/%Y")}', 0, 1, 'C')
     pdf.ln(10)
     
     # KPIs section
@@ -96,7 +96,7 @@ def generate_pptx_report(project_state):
     subtitle = title_slide.placeholders[1]
     
     title.text = "Estado del Proyecto"
-    subtitle.text = f"Informe Generado: {datetime.now().strftime('%d/%m/%Y')}"
+    subtitle.text = f"Informe Generado: {dt.datetime.now().strftime('%d/%m/%Y')}"
     
     # Add KPIs
     left = Inches(1)

@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime, timedelta
+import datetime as dt
+from datetime import timedelta
 import calendar
 
 # --- Benchmarks con períodos reales ---
@@ -50,20 +51,20 @@ baseline_days = {
 
 # --- Fechas baseline críticas ---
 baseline_fechas = {
-    "UAT": datetime(2025, 7, 31),  # Completa el 31 de julio
-    "Migration": datetime(2025, 8, 31),  # Fecha límite crítica: 31 de agosto
-    "E2E": datetime(2025, 9, 30),  # Habilitada después de Migration
-    "Training": datetime(2025, 10, 31),  # Habilitada después de Migration
-    "GoLive": datetime(2025, 11, 3),  # Fecha fija del Go-Live
+    "UAT": dt.datetime(2025, 7, 31),  # Completa el 31 de julio
+    "Migration": dt.datetime(2025, 8, 31),  # Fecha límite crítica: 31 de agosto
+    "E2E": dt.datetime(2025, 9, 30),  # Habilitada después de Migration
+    "Training": dt.datetime(2025, 10, 31),  # Habilitada después de Migration
+    "GoLive": dt.datetime(2025, 11, 3),  # Fecha fija del Go-Live
 }
 
 # --- Fechas clave para la tabla temporal ---
 fechas_clave = [
-    datetime(2025, 8, 1),
-    datetime(2025, 9, 1),
-    datetime(2025, 10, 1),
-    datetime(2025, 11, 3),  # Go-Live
-    datetime(2025, 12, 3),
+    dt.datetime(2025, 8, 1),
+    dt.datetime(2025, 9, 1),
+    dt.datetime(2025, 10, 1),
+    dt.datetime(2025, 11, 3),  # Go-Live
+    dt.datetime(2025, 12, 3),
 ]
 
 
@@ -150,8 +151,8 @@ for fase in ["UAT", "Migration", "E2E", "Training", "GoLive"]:
 
 # --- Análisis de delay crítico en Migration ---
 st.sidebar.header("Estado Migration (Fase Crítica)")
-migration_limit_date = datetime(2025, 8, 31)
-migration_actual_end = datetime(2025, 8, 1) + timedelta(days=dias_esc["Migration"])
+migration_limit_date = dt.datetime(2025, 8, 31)
+migration_actual_end = dt.datetime(2025, 8, 1) + timedelta(days=dias_esc["Migration"])
 delay_migration = max(0, (migration_actual_end - migration_limit_date).days)
 
 if delay_migration > 0:
@@ -180,21 +181,21 @@ def construir_cronograma(dias, es_baseline=False):
     calidades = []
 
     # Fechas de inicio y fin de cada fase
-    fecha_uat_inicio = datetime(2025, 7, 8)
-    fecha_uat_fin = datetime(2025, 7, 31)  # Fija
+    fecha_uat_inicio = dt.datetime(2025, 7, 8)
+    fecha_uat_fin = dt.datetime(2025, 7, 31)  # Fija
 
-    fecha_mig_inicio = datetime(2025, 8, 1)
+    fecha_mig_inicio = dt.datetime(2025, 8, 1)
     fecha_mig_fin = fecha_mig_inicio + timedelta(days=dias["Migration"])
 
     # E2E y Training dependen de Migration (habilitadas después)
-    fecha_e2e_inicio = max(fecha_mig_fin, datetime(2025, 9, 1))
+    fecha_e2e_inicio = max(fecha_mig_fin, dt.datetime(2025, 9, 1))
     fecha_e2e_fin = fecha_e2e_inicio + timedelta(days=dias["E2E"])
 
-    fecha_training_inicio = max(fecha_mig_fin, datetime(2025, 10, 1))
+    fecha_training_inicio = max(fecha_mig_fin, dt.datetime(2025, 10, 1))
     fecha_training_fin = fecha_training_inicio + timedelta(days=dias["Training"])
 
     # GoLive es fijo el 3 de noviembre
-    fecha_golive = datetime(2025, 11, 3)
+    fecha_golive = dt.datetime(2025, 11, 3)
 
     # Puntos de evaluación
     fechas = [
@@ -206,7 +207,7 @@ def construir_cronograma(dias, es_baseline=False):
     ]
 
     # Calcular delay en Migration
-    delay_mig = max(0, (fecha_mig_fin - datetime(2025, 8, 31)).days)
+    delay_mig = max(0, (fecha_mig_fin - dt.datetime(2025, 8, 31)).days)
 
     # Calcular % de completitud para cada fase
     for i, fecha_eval in enumerate(fechas):
@@ -264,13 +265,13 @@ fechas_base, calidad_base, delay_base = construir_cronograma(
 fechas_esc, calidad_esc, delay_esc = construir_cronograma(dias_esc, es_baseline=False)
 
 # --- Añadir punto de diciembre para Hypercare ---
-fechas_base_extended = fechas_base + [datetime(2025, 12, 3)]
+fechas_base_extended = fechas_base + [dt.datetime(2025, 12, 3)]
 # Para diciembre, Hypercare está al 100%
 hypercare_dic = 100
 calidad_dic_base = quality_model_econometric(100, 100, 100, 100, 100, hypercare_dic)
 calidad_base_extended = calidad_base + [calidad_dic_base]
 
-fechas_esc_extended = fechas_esc + [datetime(2025, 12, 3)]
+fechas_esc_extended = fechas_esc + [dt.datetime(2025, 12, 3)]
 # Para escenario en diciembre, considerar impacto SEVERO del delay
 eficiencia_temporal_dic = max(0.5, 1.0 - (delay_esc * 0.05))
 migration_pct_dic = 100 * eficiencia_temporal_dic
@@ -303,7 +304,7 @@ fig.add_trace(
 )
 
 # Línea vertical en Go-Live (3 nov)
-golive_date = datetime(2025, 11, 3)
+golive_date = dt.datetime(2025, 11, 3)
 fig.add_shape(
     type="line",
     x0=golive_date,

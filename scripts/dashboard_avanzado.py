@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
 import plotly.express as px
-from datetime import datetime, timedelta
+import datetime as dt
+from datetime import timedelta
 import calendar
 from scipy import stats
 import json
@@ -245,12 +246,12 @@ with col1:
 
     # Crear cronograma
     fechas = [
-        datetime(2025, 7, 31),  # UAT
-        datetime(2025, 8, 31) + timedelta(days=delay_migration),  # Migration
-        datetime(2025, 9, 30) + timedelta(days=delay_migration),  # E2E
-        datetime(2025, 10, 31) + timedelta(days=delay_migration),  # Training
-        datetime(2025, 11, 3) + timedelta(days=delay_migration),  # GoLive
-        datetime(2025, 12, 3) + timedelta(days=delay_migration),  # Hypercare
+        dt.datetime(2025, 7, 31),  # UAT
+        dt.datetime(2025, 8, 31) + timedelta(days=delay_migration),  # Migration
+        dt.datetime(2025, 9, 30) + timedelta(days=delay_migration),  # E2E
+        dt.datetime(2025, 10, 31) + timedelta(days=delay_migration),  # Training
+        dt.datetime(2025, 11, 3) + timedelta(days=delay_migration),  # GoLive
+        dt.datetime(2025, 12, 3) + timedelta(days=delay_migration),  # Hypercare
     ]
 
     calidades = [61.2, 61.7, 76.5, 88.2, calidad_actual, 100.0]

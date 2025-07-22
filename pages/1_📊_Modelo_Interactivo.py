@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime, date, time as dt_time, timedelta
+import datetime as dt
+from datetime import date, time, timedelta
 import traceback
 from translations import TEXT, LANGUAGES
 from styles import (
@@ -124,17 +125,17 @@ def get_completion_pct(
     if start is None or end is None or eval_date is None:
         return 0.0
     if isinstance(start, str):
-        start = datetime.strptime(start, "%Y-%m-%d")
+        start = dt.datetime.strptime(start, "%Y-%m-%d")
     if isinstance(end, str):
-        end = datetime.strptime(end, "%Y-%m-%d")
+        end = dt.datetime.strptime(end, "%Y-%m-%d")
     if isinstance(eval_date, str):
-        eval_date = datetime.strptime(eval_date, "%Y-%m-%d")
-    if isinstance(start, date) and not isinstance(start, datetime):
-        start = datetime.combine(start, dt_time.min)
-    if isinstance(end, date) and not isinstance(end, datetime):
-        end = datetime.combine(end, dt_time.min)
-    if isinstance(eval_date, date) and not isinstance(eval_date, datetime):
-        eval_date = datetime.combine(eval_date, dt_time.min)
+        eval_date = dt.datetime.strptime(eval_date, "%Y-%m-%d")
+    if isinstance(start, date) and not isinstance(start, dt.datetime):
+        start = dt.datetime.combine(start, time.min)
+    if isinstance(end, date) and not isinstance(end, dt.datetime):
+        end = dt.datetime.combine(end, time.min)
+    if isinstance(eval_date, date) and not isinstance(eval_date, dt.datetime):
+        eval_date = dt.datetime.combine(eval_date, time.min)
 
     if eval_date < start:
         return 0.0
@@ -163,13 +164,13 @@ def get_completion_pct(
 def to_dt(x):
     """Convierte date o datetime.date en datetime.datetime a las 00:00h"""
     if x is None:
-        return datetime.now()
-    if isinstance(x, datetime):
+        return dt.datetime.now()
+    if isinstance(x, dt.datetime):
         return x
     if isinstance(x, date):
-        return datetime.combine(x, dt_time.min)
+        return dt.datetime.combine(x, time.min)
     if isinstance(x, (int, float)):
-        return datetime.fromtimestamp(x)
+        return dt.datetime.fromtimestamp(x)
     return x
 
 
@@ -178,24 +179,24 @@ def get_days_between(start_date, end_date):
     if start_date is None or end_date is None:
         return 0
     if isinstance(start_date, str):
-        start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        start_date = dt.datetime.strptime(start_date, "%Y-%m-%d")
     if isinstance(end_date, str):
-        end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    if isinstance(start_date, date) and not isinstance(start_date, datetime):
-        start_date = datetime.combine(start_date, dt_time.min)
-    if isinstance(end_date, date) and not isinstance(end_date, datetime):
-        end_date = datetime.combine(end_date, dt_time.min)
+        end_date = dt.datetime.strptime(end_date, "%Y-%m-%d")
+    if isinstance(start_date, date) and not isinstance(start_date, dt.datetime):
+        start_date = dt.datetime.combine(start_date, time.min)
+    if isinstance(end_date, date) and not isinstance(end_date, dt.datetime):
+        end_date = dt.datetime.combine(end_date, time.min)
     return (end_date - start_date).days
 
 
 def add_days(base_date, days):
     """Añade días a una fecha, manejando None"""
     if base_date is None:
-        return datetime.now()
+        return dt.datetime.now()
     if isinstance(base_date, str):
-        base_date = datetime.strptime(base_date, "%Y-%m-%d")
-    if isinstance(base_date, date) and not isinstance(base_date, datetime):
-        base_date = datetime.combine(base_date, dt_time.min)
+        base_date = dt.datetime.strptime(base_date, "%Y-%m-%d")
+    if isinstance(base_date, date) and not isinstance(base_date, dt.datetime):
+        base_date = dt.datetime.combine(base_date, time.min)
     return base_date + timedelta(days=days)
 
 
@@ -322,17 +323,17 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
 
 
 # Rango global donde pueden moverse los sliders
-CAL_START = datetime(2025, 7, 1)
-CAL_END = datetime(2026, 1, 1)
+CAL_START = dt.datetime(2025, 7, 1)
+CAL_END = dt.datetime(2026, 1, 1)
 
 # Baselines fijos de cada fase
 baseline_windows = {
-    "UAT": (datetime(2025, 7, 8), datetime(2025, 7, 31)),
-    "Migration": (datetime(2025, 8, 1), datetime(2025, 8, 31)),
-    "E2E": (datetime(2025, 9, 1), datetime(2025, 9, 30)),
-    "Training": (datetime(2025, 10, 1), datetime(2025, 10, 31)),
-    "PRO": (datetime(2025, 10, 1), datetime(2025, 10, 30)),
-    "Hypercare": (datetime(2025, 11, 3), datetime(2025, 12, 3)),
+    "UAT": (dt.datetime(2025, 7, 8), dt.datetime(2025, 7, 31)),
+    "Migration": (dt.datetime(2025, 8, 1), dt.datetime(2025, 8, 31)),
+    "E2E": (dt.datetime(2025, 9, 1), dt.datetime(2025, 9, 30)),
+    "Training": (dt.datetime(2025, 10, 1), dt.datetime(2025, 10, 31)),
+    "PRO": (dt.datetime(2025, 10, 1), dt.datetime(2025, 10, 30)),
+    "Hypercare": (dt.datetime(2025, 11, 3), dt.datetime(2025, 12, 3)),
 }
 
 # Baseline durations for preventing reabsorption
@@ -522,7 +523,7 @@ with st.sidebar:
                     'external_risks': st.session_state.external_risks,
                     'reabsorcion_e2e': st.session_state.reabsorcion_e2e,
                     'reabsorcion_training': st.session_state.reabsorcion_training,
-                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    'timestamp': dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 st.session_state.scenarios[scenario_name] = current_scenario
                 st.success(f"✅ Escenario '{scenario_name}' guardado")
@@ -607,66 +608,66 @@ hyper_start, hyper_end = scenario_windows["Hypercare"]
 
 # --- Definición de fechas baseline ---
 baseline_start_dates = {
-    "UAT": datetime(2025, 7, 8),
-    "Migration": datetime(2025, 8, 1),
-    "E2E": datetime(2025, 9, 1),
-    "Training": datetime(2025, 10, 1),
-    "PRO": datetime(2025, 10, 1),
-    "Hypercare": datetime(2025, 11, 3),
+    "UAT": dt.datetime(2025, 7, 8),
+    "Migration": dt.datetime(2025, 8, 1),
+    "E2E": dt.datetime(2025, 9, 1),
+    "Training": dt.datetime(2025, 10, 1),
+    "PRO": dt.datetime(2025, 10, 1),
+    "Hypercare": dt.datetime(2025, 11, 3),
 }
 
 baseline_end_dates = {
-    "UAT": datetime(2025, 7, 31),
-    "Migration": datetime(2025, 8, 31),
-    "E2E": datetime(2025, 9, 30),
-    "Training": datetime(2025, 10, 31),
-    "PRO": datetime(2025, 10, 30),
-    "Hypercare": datetime(2025, 12, 3),
+    "UAT": dt.datetime(2025, 7, 31),
+    "Migration": dt.datetime(2025, 8, 31),
+    "E2E": dt.datetime(2025, 9, 30),
+    "Training": dt.datetime(2025, 10, 31),
+    "PRO": dt.datetime(2025, 10, 30),
+    "Hypercare": dt.datetime(2025, 12, 3),
 }
 
 # Fechas baseline por fase
 baseline_ranges = {
     "UAT": {
-        "start": datetime(2025, 7, 8),
-        "end": datetime(2025, 7, 31),
+        "start": dt.datetime(2025, 7, 8),
+        "end": dt.datetime(2025, 7, 31),
         "label": "UAT (Baseline: 8-Jul → 31-Jul)",
     },
     "Migration": {
-        "start": datetime(2025, 8, 1),
-        "end": datetime(2025, 8, 31),
+        "start": dt.datetime(2025, 8, 1),
+        "end": dt.datetime(2025, 8, 31),
         "label": "Migration (Baseline: 1-Ago → 31-Ago)",
     },
     "E2E": {
-        "start": datetime(2025, 9, 1),
-        "end": datetime(2025, 9, 30),
+        "start": dt.datetime(2025, 9, 1),
+        "end": dt.datetime(2025, 9, 30),
         "label": "E2E (Baseline: 1-Sep → 30-Sep)",
     },
     "Training": {
-        "start": datetime(2025, 10, 1),
-        "end": datetime(2025, 10, 31),
+        "start": dt.datetime(2025, 10, 1),
+        "end": dt.datetime(2025, 10, 31),
         "label": "Training (Baseline: 1-Oct → 31-Oct)",
     },
     "PRO": {
-        "start": datetime(2025, 10, 1),
-        "end": datetime(2025, 10, 30),
+        "start": dt.datetime(2025, 10, 1),
+        "end": dt.datetime(2025, 10, 30),
         "label": "PRO (Baseline: 1-Oct → 30-Oct)",
     },
     "Hypercare": {
-        "start": datetime(2025, 11, 3),
-        "end": datetime(2025, 12, 3),
+        "start": dt.datetime(2025, 11, 3),
+        "end": dt.datetime(2025, 12, 3),
         "label": "Hypercare (Baseline: 3-Nov → 3-Dic)",
     },
 }
 
 # Fechas deadline por fase
 baseline_fechas = {
-    "UAT": datetime(2025, 7, 31),
-    "Migration": datetime(2025, 8, 31),
-    "E2E": datetime(2025, 9, 30),
-    "Training": datetime(2025, 10, 31),
-    "PRO": datetime(2025, 10, 30),
-    "Hypercare": datetime(2025, 11, 28),
-    "GoLive": datetime(2025, 11, 3),
+    "UAT": dt.datetime(2025, 7, 31),
+    "Migration": dt.datetime(2025, 8, 31),
+    "E2E": dt.datetime(2025, 9, 30),
+    "Training": dt.datetime(2025, 10, 31),
+    "PRO": dt.datetime(2025, 10, 30),
+    "Hypercare": dt.datetime(2025, 11, 28),
+    "GoLive": dt.datetime(2025, 11, 3),
 }
 
 # Construir cronograma baseline (sin penalizaciones)
@@ -691,7 +692,7 @@ if execution_time > 1.0:
     st.info(f"⏱️ Tiempo de cálculo del modelo: {execution_time:.2f} segundos")
 
 # --- PUNTO: interpolar calidad en Go-Live ---
-go_live_date = datetime(2025, 11, 3)
+go_live_date = dt.datetime(2025, 11, 3)
 
 # Convertir a timestamps
 base_ts = [f.timestamp() for f in fechas_base]
@@ -704,7 +705,7 @@ delta_gl = calidad_esc_gl - calidad_base_gl
 
 # Countdown hasta Go-Live
 dias_para_golive = max(
-    0, (to_dt(datetime(2025, 11, 3)) - to_dt(datetime.now().date())).days
+    0, (to_dt(dt.datetime(2025, 11, 3)) - to_dt(dt.datetime.now().date())).days
 )
 
 # --- KPIs Panel ---

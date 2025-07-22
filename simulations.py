@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+import datetime as dt
+from datetime import timedelta
 from phase_model import calculate_project_timeline
 
 def pert_random(min_val, most_likely, max_val, size=1):
