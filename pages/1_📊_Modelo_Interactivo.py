@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime, date, time, timedelta
+import datetime as dt
+from datetime import date, time, timedelta
 import traceback
 from translations import TEXT, LANGUAGES
 from styles import (
@@ -14,6 +15,9 @@ from styles import (
     toast,
     PLOT_LAYOUT,
 )
+
+# Alias para mantener compatibilidad interna mientras migramos gradualmente
+datetime = dt.datetime
 
 # --- UI Configuration ---
 st.set_page_config(page_title="Modelo Interactivo", layout="wide")
@@ -107,8 +111,15 @@ def quality_model_econometric(params, risk_params=None):
     return min(max(calidad_normalizada, 0), 100)
 
 
+# ------------------------------------------------------------------
+# Funciones auxiliares con manejo de fechas estandarizado (dt.datetime)
+# ------------------------------------------------------------------
+
 def get_completion_pct(
-    start: datetime, end: datetime, eval_date: datetime, baseline_duration: int = None
+    start: dt.datetime,
+    end: dt.datetime,
+    eval_date: dt.datetime,
+    baseline_duration: int | None = None,
 ) -> float:
     """
     Devuelve el % completitud de una fase:
@@ -124,17 +135,17 @@ def get_completion_pct(
     if start is None or end is None or eval_date is None:
         return 0.0
     if isinstance(start, str):
-        start = datetime.strptime(start, "%Y-%m-%d")
+        start = dt.datetime.strptime(start, "%Y-%m-%d")
     if isinstance(end, str):
-        end = datetime.strptime(end, "%Y-%m-%d")
+        end = dt.datetime.strptime(end, "%Y-%m-%d")
     if isinstance(eval_date, str):
-        eval_date = datetime.strptime(eval_date, "%Y-%m-%d")
-    if isinstance(start, date) and not isinstance(start, datetime):
-        start = datetime.combine(start, time.min)
-    if isinstance(end, date) and not isinstance(end, datetime):
-        end = datetime.combine(end, time.min)
-    if isinstance(eval_date, date) and not isinstance(eval_date, datetime):
-        eval_date = datetime.combine(eval_date, time.min)
+        eval_date = dt.datetime.strptime(eval_date, "%Y-%m-%d")
+    if isinstance(start, date) and not isinstance(start, dt.datetime):
+        start = dt.datetime.combine(start, time.min)
+    if isinstance(end, date) and not isinstance(end, dt.datetime):
+        end = dt.datetime.combine(end, time.min)
+    if isinstance(eval_date, date) and not isinstance(eval_date, dt.datetime):
+        eval_date = dt.datetime.combine(eval_date, time.min)
 
     if eval_date < start:
         return 0.0
@@ -161,15 +172,15 @@ def get_completion_pct(
 
 
 def to_dt(x):
-    """Convierte date o datetime.date en datetime.datetime a las 00:00h"""
+    """Convierte date o datetime.date en dt.datetime a las 00:00h"""
     if x is None:
-        return datetime.now()
-    if isinstance(x, datetime):
+        return dt.datetime.now()
+    if isinstance(x, dt.datetime):
         return x
     if isinstance(x, date):
-        return datetime.combine(x, time.min)
+        return dt.datetime.combine(x, time.min)
     if isinstance(x, (int, float)):
-        return datetime.fromtimestamp(x)
+        return dt.datetime.fromtimestamp(x)
     return x
 
 
@@ -178,24 +189,24 @@ def get_days_between(start_date, end_date):
     if start_date is None or end_date is None:
         return 0
     if isinstance(start_date, str):
-        start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        start_date = dt.datetime.strptime(start_date, "%Y-%m-%d")
     if isinstance(end_date, str):
-        end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    if isinstance(start_date, date) and not isinstance(start_date, datetime):
-        start_date = datetime.combine(start_date, time.min)
-    if isinstance(end_date, date) and not isinstance(end_date, datetime):
-        end_date = datetime.combine(end_date, time.min)
+        end_date = dt.datetime.strptime(end_date, "%Y-%m-%d")
+    if isinstance(start_date, date) and not isinstance(start_date, dt.datetime):
+        start_date = dt.datetime.combine(start_date, time.min)
+    if isinstance(end_date, date) and not isinstance(end_date, dt.datetime):
+        end_date = dt.datetime.combine(end_date, time.min)
     return (end_date - start_date).days
 
 
 def add_days(base_date, days):
     """Añade días a una fecha, manejando None"""
     if base_date is None:
-        return datetime.now()
+        return dt.datetime.now()
     if isinstance(base_date, str):
-        base_date = datetime.strptime(base_date, "%Y-%m-%d")
-    if isinstance(base_date, date) and not isinstance(base_date, datetime):
-        base_date = datetime.combine(base_date, time.min)
+        base_date = dt.datetime.strptime(base_date, "%Y-%m-%d")
+    if isinstance(base_date, date) and not isinstance(base_date, dt.datetime):
+        base_date = dt.datetime.combine(base_date, time.min)
     return base_date + timedelta(days=days)
 
 
@@ -691,7 +702,7 @@ if execution_time > 1.0:
     st.info(f"⏱️ Tiempo de cálculo del modelo: {execution_time:.2f} segundos")
 
 # --- PUNTO: interpolar calidad en Go-Live ---
-go_live_date = datetime(2025, 11, 3)
+go_live_date = dt.datetime(2025, 11, 3)
 
 # Convertir a timestamps
 base_ts = [f.timestamp() for f in fechas_base]
@@ -704,7 +715,7 @@ delta_gl = calidad_esc_gl - calidad_base_gl
 
 # Countdown hasta Go-Live
 dias_para_golive = max(
-    0, (to_dt(datetime(2025, 11, 3)) - to_dt(datetime.now().date())).days
+    0, (to_dt(dt.datetime(2025, 11, 3)) - to_dt(dt.datetime.now().date())).days
 )
 
 # --- KPIs Panel ---
