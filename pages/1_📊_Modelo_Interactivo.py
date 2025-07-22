@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
+import datetime
 from datetime import datetime, date, time, timedelta
 import traceback
 from translations import TEXT, LANGUAGES
@@ -161,16 +162,17 @@ def get_completion_pct(
 
 
 def to_dt(x):
-    """Convierte date o datetime.date en datetime.datetime a las 00:00h"""
-    if x is None:
-        return datetime.now()  # Valor por defecto en lugar de None
-    if isinstance(x, datetime):
+    """
+    Convierte un objeto date o datetime a un objeto datetime.
+    Si el objeto de entrada ya es un datetime, lo devuelve sin cambios.
+    Si es un objeto date, lo convierte a datetime con la hora mínima (00:00:00).
+    """
+    if isinstance(x, datetime.datetime):
         return x
-    if isinstance(x, date) and not isinstance(x, datetime):
-        return datetime.combine(x, time.min)
-    if isinstance(x, (int, float)):
-        return datetime.fromtimestamp(x)
-    return x
+    if isinstance(x, datetime.date):
+        return datetime.datetime.combine(x, datetime.time.min)
+    # Opcional: manejar otros tipos de datos si es necesario
+    raise TypeError("La entrada para to_dt debe ser un objeto date o datetime")
 
 
 def get_days_between(start_date, end_date):
