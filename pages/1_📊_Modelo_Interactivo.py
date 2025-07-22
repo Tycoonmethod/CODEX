@@ -587,12 +587,15 @@ try:
         )
     
     with col3:
+        # Add title for health score (same style as other KPIs)
+        st.markdown("**🏥 Health Score**")
+        
         # Create gauge chart for health score
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
             value=health_score,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "🏥 Health Score", 'font': {'size': 12}},
+            title={'text': "", 'font': {'size': 12}},
             gauge={
                 'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
                 'bar': {'color': "darkblue"},
