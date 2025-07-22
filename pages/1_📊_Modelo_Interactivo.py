@@ -203,91 +203,114 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
     """
     Construye el cronograma extendiendo el horizonte temporal para encontrar la calidad objetivo.
     """
+    # Definir la secuencia de fases para la propagación de delays
+    PHASE_SEQUENCE = ["UAT", "Migration", "E2E", "Training", "PRO", "Hypercare"]
+    
     try:
-        effective_windows = {k: v for k, v in sim_windows.items()}
+        if not penalty_baseline:
+            # Para el baseline, sin delays ni reabsorción
+            effective_windows = {k: v for k, v in sim_windows.items()}
+            
+            # Calcular delays y penalizaciones (sin penalizaciones para baseline)
+            penalty_factors = {fase: 1.0 for fase in baseline_windows.keys()}
+
+            # Extender el horizonte temporal para la simulación
+            start_date = min(effective_windows['UAT'][0], baseline_windows['UAT'][0])
+            last_phase_end = max(effective_windows['Hypercare'][1], baseline_windows['Hypercare'][1])
+            end_date = last_phase_end + timedelta(days=180)
+            fechas_evaluacion = pd.date_range(start=start_date, end=end_date, freq='D')
+
+            calidades = []
+            for fecha in fechas_evaluacion:
+                params = {}
+                for fase in baseline_windows.keys():
+                    pct = get_completion_pct(
+                        effective_windows[fase][0], effective_windows[fase][1], fecha,
+                        baseline_duration=baseline_days.get(fase)
+                    )
+                    params[fase] = (pct / 100) * penalty_factors[fase]
+
+                calidad = quality_model_econometric(params, st.session_state.risk_values)
+                calidades.append(calidad)
+
+            end_dates = {fase: effective_windows[fase][1] for fase in baseline_windows}
+            return fechas_evaluacion, calidades, {}, end_dates
 
         # --- INICIO DEL NUEVO BLOQUE DE LÓGICA CORREGIDA ---
-        delays = {}
-        
-        # Extraer fechas de las ventanas de simulación
-        uat_start, uat_end = sim_windows["UAT"]
-        mig_start, mig_end = sim_windows["Migration"]
-        e2e_start0, e2e_end0 = sim_windows["E2E"]
-        train_start0, train_end0 = sim_windows["Training"]
-        pro_start, pro_end = sim_windows["PRO"]
-        hyper_start, hyper_end = sim_windows["Hypercare"]
-        
-        # 1. Calcular el delay inicial de la fase que lo origina (Migration)
-        dl = baseline_windows  # baseline_windows es el penalty_baseline
-        delay_mig = max(0, (mig_end - dl["Migration"][1]).days)
-        delays["Migration"] = delay_mig
+        else: # Para el escenario, con delays y reabsorción
+            try:
+                delays = {}
+                effective_windows = {k: v for k, v in sim_windows.items()} # Copia inicial
 
-        # 2. Leer los porcentajes de reabsorción
-        reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
-        reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
+                # 1. Propagación inicial de delays en cadena (sin reabsorción aún)
+                for i in range(1, len(PHASE_SEQUENCE)):
+                    predecessor = PHASE_SEQUENCE[i-1]
+                    current_phase = PHASE_SEQUENCE[i]
+                    
+                    # La fecha de inicio real es la del slider o el final del predecesor + 1 día
+                    actual_start = max(
+                        effective_windows[current_phase][0],
+                        effective_windows[predecessor][1] + timedelta(days=1)
+                    )
+                    duration = (effective_windows[current_phase][1] - sim_windows[current_phase][0]).days
+                    actual_end = actual_start + timedelta(days=duration)
+                    effective_windows[current_phase] = (actual_start, actual_end)
 
-        # 3. Calcular los días totales reabsorbidos y el retraso neto que se propagará
-        dias_reabsorbidos = delay_mig * (reabsorcion_e2e_pct + reabsorcion_training_pct)
-        net_delay_propagado = max(0, round(delay_mig - dias_reabsorbidos))
+                # 2. Calcular el delay original de Migration (la fuente del problema)
+                delay_mig = max(0, (effective_windows["Migration"][1] - baseline_windows["Migration"][1]).days)
 
-        # 4. Calcular las fechas de inicio y fin de las fases posteriores basándose en el retraso neto
-        # La fecha de fin "efectiva" de Migration es la del baseline + el retraso neto
-        mig_end_efectivo = dl["Migration"][1] + timedelta(days=net_delay_propagado)
+                # 3. Leer los factores de reabsorción
+                reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
+                reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
 
-        # E2E y Training ahora dependen de esta fecha corregida
-        e2e_start = mig_end_efectivo + timedelta(days=1)
-        e2e_duration = (e2e_end0 - e2e_start0).days
-        e2e_end = e2e_start + timedelta(days=e2e_duration)
+                # 4. Calcular los días reabsorbidos y el retraso neto final
+                dias_reabsorbidos = delay_mig * (reabsorcion_e2e_pct + reabsorcion_training_pct)
+                net_delay_propagado = max(0, round(delay_mig - dias_reabsorbidos))
 
-        train_start = e2e_end + timedelta(days=1)
-        train_duration = (train_end0 - train_start0).days
-        train_end = train_start + timedelta(days=train_duration)
+                # 5. RECALCULAR las fechas de E2E y Training basándose en el retraso NETO
+                mig_end_baseline = baseline_windows["Migration"][1]
+                
+                e2e_start_corregido = mig_end_baseline + timedelta(days=net_delay_propagado + 1)
+                e2e_duration = (sim_windows["E2E"][1] - sim_windows["E2E"][0]).days
+                e2e_end_corregido = e2e_start_corregido + timedelta(days=e2e_duration)
+                effective_windows["E2E"] = (e2e_start_corregido, e2e_end_corregido)
 
-        # Actualizar las ventanas efectivas para el cálculo de calidad
-        effective_windows = {
-            "UAT": (uat_start, uat_end),
-            "Migration": (mig_start, mig_end),
-            "E2E": (e2e_start, e2e_end),
-            "Training": (train_start, train_end),
-            "PRO": (pro_start, pro_end), # PRO no se ve afectado por la cascada en este modelo
-            "Hypercare": (hyper_start, hyper_end)
-        }
+                train_start_corregido = e2e_end_corregido + timedelta(days=1)
+                train_duration = (sim_windows["Training"][1] - sim_windows["Training"][0]).days
+                train_end_corregido = train_start_corregido + timedelta(days=train_duration)
+                effective_windows["Training"] = (train_start_corregido, train_end_corregido)
 
-        delays["E2E"] = max(0, (e2e_end - dl["E2E"][1]).days)
-        delays["Training"] = max(0, (train_end - dl["Training"][1]).days)
+                # Calcular delays y penalizaciones basado en las fechas FINALES
+                final_delays = {fase: max(0, (effective_windows[fase][1] - baseline_windows[fase][1]).days) for fase in baseline_windows.keys()}
+                penalty_factors = {fase: 1 - (delay * DELAY_PENALTY_FACTORS.get(fase, 0)) for fase, delay in final_delays.items()}
+
+                # Extender el horizonte temporal para la simulación
+                start_date = min(effective_windows['UAT'][0], baseline_windows['UAT'][0])
+                last_phase_end = max(effective_windows['Hypercare'][1], baseline_windows['Hypercare'][1])
+                end_date = last_phase_end + timedelta(days=180)
+                fechas_evaluacion = pd.date_range(start=start_date, end=end_date, freq='D')
+
+                calidades = []
+                for fecha in fechas_evaluacion:
+                    params = {}
+                    for fase in baseline_windows.keys():
+                        pct = get_completion_pct(
+                            effective_windows[fase][0], effective_windows[fase][1], fecha,
+                            baseline_duration=baseline_days.get(fase)
+                        )
+                        params[fase] = (pct / 100) * penalty_factors[fase]
+
+                    calidad = quality_model_econometric(params, st.session_state.risk_values)
+                    calidades.append(calidad)
+
+                end_dates = {fase: effective_windows[fase][1] for fase in baseline_windows}
+                return fechas_evaluacion, calidades, final_delays, end_dates
+
+            except Exception as e:
+                st.error(f"Error en construir_cronograma_seguro: {type(e).__name__}: {e}")
+                st.error(f"Traceback completo: {traceback.format_exc()}")
+                return [], [], {}, {}
         # --- FIN DEL NUEVO BLOQUE DE LÓGICA CORREGIDA ---
-
-        # Calcular delays y penalizaciones SOLO si se proporciona un baseline.
-        penalty_factors = {fase: 1.0 for fase in baseline_windows.keys()}
-
-        if penalty_baseline:
-            delays = {fase: max(0, (effective_windows[fase][1] - penalty_baseline[fase][1]).days)
-                      for fase in baseline_windows.keys()}
-            penalty_factors = {fase: 1 - (delay * DELAY_PENALTY_FACTORS.get(fase, 0))
-                               for fase, delay in delays.items()}
-
-        # Extender el horizonte temporal para la simulación
-        start_date = min(effective_windows['UAT'][0], baseline_windows['UAT'][0])
-        last_phase_end = max(effective_windows['Hypercare'][1], baseline_windows['Hypercare'][1])
-        # Añadir un buffer de 6 meses para asegurar que encontramos la fecha objetivo
-        end_date = last_phase_end + timedelta(days=180)
-        fechas_evaluacion = pd.date_range(start=start_date, end=end_date, freq='D')
-
-        calidades = []
-        for fecha in fechas_evaluacion:
-            params = {}
-            for fase in baseline_windows.keys():
-                pct = get_completion_pct(
-                    effective_windows[fase][0], effective_windows[fase][1], fecha,
-                    baseline_duration=baseline_days.get(fase)
-                )
-                params[fase] = (pct / 100) * penalty_factors[fase]
-
-            calidad = quality_model_econometric(params, st.session_state.risk_values)
-            calidades.append(calidad)
-
-        end_dates = {fase: effective_windows[fase][1] for fase in baseline_windows}
-        return fechas_evaluacion, calidades, delays, end_dates
 
     except Exception as e:
         st.error(f"Error en construir_cronograma_seguro: {type(e).__name__}: {e}")
