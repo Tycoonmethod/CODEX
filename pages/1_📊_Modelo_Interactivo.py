@@ -327,15 +327,39 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
 
                 calidades = []
                 for fecha in fechas_evaluacion:
-                    params = {}
+                    # Calcular parámetros con penalizaciones normales
+                    params_con_penalty = {}
+                    params_sin_penalty = {}
+                    
+                    for fase in baseline_windows.keys():
+                        pct = get_completion_pct(
+                            effective_windows[fase][0], effective_windows[fase][1], fecha,
+                            baseline_duration=baseline_days.get(fase)
+                        )
+                        # Con penalización
+                        params_con_penalty[fase] = (pct / 100) * penalty_factors[fase]
+                        # Sin penalización (baseline)
+                        params_sin_penalty[fase] = (pct / 100) * 1.0
+                    
+                    # Calcular calidad con y sin penalizaciones
+                    calidad_con_penalty = quality_model_econometric(params_con_penalty, st.session_state.risk_values)
+                    calidad_sin_penalty = quality_model_econometric(params_sin_penalty, st.session_state.risk_values)
                     
                     # Calcular el factor de reabsorción gradual según la fase actual
                     factor_reabsorcion = 0.0
                     
+                    # Si estamos antes de E2E, no hay reabsorción
+                    if fecha < effective_windows["E2E"][0]:
+                        factor_reabsorcion = 0.0
+                    
                     # Si estamos en E2E, aplicar reabsorción gradual
-                    if effective_windows["E2E"][0] <= fecha <= effective_windows["E2E"][1]:
+                    elif effective_windows["E2E"][0] <= fecha <= effective_windows["E2E"][1]:
                         progreso_e2e = (fecha - effective_windows["E2E"][0]).days / max(1, (effective_windows["E2E"][1] - effective_windows["E2E"][0]).days)
                         factor_reabsorcion = progreso_e2e * reabsorcion_e2e_pct
+                    
+                    # Si estamos entre E2E y Training, mantener la reabsorción de E2E
+                    elif effective_windows["E2E"][1] < fecha < effective_windows["Training"][0]:
+                        factor_reabsorcion = reabsorcion_e2e_pct
                     
                     # Si estamos en Training, aplicar reabsorción gradual adicional
                     elif effective_windows["Training"][0] <= fecha <= effective_windows["Training"][1]:
@@ -346,18 +370,9 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                     elif fecha > effective_windows["Training"][1]:
                         factor_reabsorcion = reabsorcion_e2e_pct + reabsorcion_training_pct
                     
-                    for fase in baseline_windows.keys():
-                        pct = get_completion_pct(
-                            effective_windows[fase][0], effective_windows[fase][1], fecha,
-                            baseline_duration=baseline_days.get(fase)
-                        )
-                        
-                        # Aplicar penalización con ajuste por reabsorción
-                        penalty_ajustada = 1 - ((1 - penalty_factors[fase]) * (1 - factor_reabsorcion))
-                        params[fase] = (pct / 100) * penalty_ajustada
-
-                    calidad = quality_model_econometric(params, st.session_state.risk_values)
-                    calidades.append(calidad)
+                    # Interpolar entre calidad con penalización y calidad sin penalización
+                    calidad_final = calidad_con_penalty + (calidad_sin_penalty - calidad_con_penalty) * factor_reabsorcion
+                    calidades.append(calidad_final)
 
                 end_dates = {fase: effective_windows[fase][1] for fase in baseline_windows}
                 return fechas_evaluacion, calidades, final_delays, end_dates
