@@ -289,39 +289,9 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                 end_date = last_phase_end + timedelta(days=180)
                 fechas_evaluacion = pd.date_range(start=start_date, end=end_date, freq='D')
 
-                # Primero calcular las calidades del baseline para interpolación
-                # Esto nos da la referencia de calidad sin delays
-                calidades_baseline_ref = []
-                for fecha in fechas_evaluacion:
-                    params_baseline = {}
-                    for fase in baseline_windows.keys():
-                        pct = get_completion_pct(
-                            baseline_windows[fase][0], baseline_windows[fase][1], fecha,
-                            baseline_duration=baseline_days.get(fase)
-                        )
-                        params_baseline[fase] = (pct / 100) * 1.0
-                    calidad_baseline = quality_model_econometric(params_baseline, {k: 0 for k in st.session_state.risk_values.keys()})
-                    calidades_baseline_ref.append(calidad_baseline)
-                
-                # Ahora calcular las calidades del escenario con posibilidad de reabsorción
+                # Calcular las calidades del escenario con posibilidad de reabsorción
                 calidades = []
                 for i, fecha in enumerate(fechas_evaluacion):
-                    # Calcular parámetros del escenario con delays y penalizaciones
-                    params_con_penalty = {}
-                    
-                    for fase in baseline_windows.keys():
-                        pct_con_delay = get_completion_pct(
-                            effective_windows[fase][0], effective_windows[fase][1], fecha,
-                            baseline_duration=baseline_days.get(fase)
-                        )
-                        params_con_penalty[fase] = (pct_con_delay / 100) * penalty_factors[fase]
-                    
-                    # Calcular calidad del escenario con penalizaciones
-                    calidad_con_penalty = quality_model_econometric(params_con_penalty, st.session_state.risk_values)
-                    
-                    # Obtener la calidad del baseline en este punto
-                    calidad_baseline_en_fecha = calidades_baseline_ref[i]
-                    
                     # Calcular el factor de reabsorción gradual según la fase actual
                     factor_reabsorcion = 0.0
                     
@@ -354,8 +324,23 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                     elif fecha > baseline_windows["Training"][1]:
                         factor_reabsorcion = reabsorcion_e2e_pct + reabsorcion_training_pct
                     
-                    # Interpolar entre calidad con penalización y calidad del baseline
-                    calidad_final = calidad_con_penalty + (calidad_baseline_en_fecha - calidad_con_penalty) * factor_reabsorcion
+                    # Calcular parámetros ajustando dinámicamente las penalizaciones según la reabsorción
+                    params_ajustados = {}
+                    
+                    for fase in baseline_windows.keys():
+                        pct_con_delay = get_completion_pct(
+                            effective_windows[fase][0], effective_windows[fase][1], fecha,
+                            baseline_duration=baseline_days.get(fase)
+                        )
+                        
+                        # Ajustar el penalty_factor según la reabsorción
+                        penalty_original = penalty_factors[fase]
+                        penalty_ajustado = 1 - ((1 - penalty_original) * (1 - factor_reabsorcion))
+                        
+                        params_ajustados[fase] = (pct_con_delay / 100) * penalty_ajustado
+                    
+                    # Calcular calidad final con penalizaciones ajustadas
+                    calidad_final = quality_model_econometric(params_ajustados, st.session_state.risk_values)
                     calidades.append(calidad_final)
 
                 end_dates = {fase: effective_windows[fase][1] for fase in baseline_windows}
@@ -677,6 +662,25 @@ with st.sidebar:
                 st.warning("⚠️ El modelo puede estar tardando más de lo esperado. Considera optimizar.")
             else:
                 st.info("✅ Rendimiento del modelo dentro de parámetros normales.")
+        
+        # Debug de reabsorción
+        st.markdown("#### Debug de Reabsorción")
+        if st.session_state.get('reabsorcion_e2e', 0) > 0 or st.session_state.get('reabsorcion_training', 0) > 0:
+            # Mostrar puntos de verificación
+            fechas_verificacion = [
+                ("Antes de E2E", datetime(2025, 8, 15)),
+                ("Mitad de E2E", datetime(2025, 9, 15)),
+                ("Fin de E2E", datetime(2025, 9, 30)),
+                ("Mitad de Training", datetime(2025, 10, 15)),
+                ("Fin de Training", datetime(2025, 10, 31)),
+                ("Go-Live", datetime(2025, 11, 3))
+            ]
+            
+            st.markdown("**Calidad en puntos clave:**")
+            for nombre, fecha in fechas_verificacion:
+                idx = next((i for i, f in enumerate(fechas_esc) if f.date() == fecha.date()), None)
+                if idx is not None:
+                    st.write(f"- {nombre}: {calidad_esc[idx]:.1f}%")
 
 # Desempaquetar fechas de escenario
 uat_start, uat_end = scenario_windows["UAT"]
@@ -958,36 +962,38 @@ with main_container:
         if reabsorcion_total > 0:
             st.markdown("##### 🔄 Reabsorción Activa")
             
-            # Calcular el delay inicial hasta Migration
-            delay_inicial = 0
-            if "Migration" in delays_esc and delays_esc["Migration"] > 0:
-                delay_inicial = delays_esc["Migration"]
-            elif "UAT" in delays_esc and delays_esc["UAT"] > 0:
-                delay_inicial = delays_esc["UAT"]
+            # Calcular el delay inicial total del proyecto
+            delay_total_proyecto = sum(delays_esc.values())
             
-            if delay_inicial > 0:
-                dias_reabsorbidos_e2e = round(delay_inicial * st.session_state.get('reabsorcion_e2e', 0) / 100)
-                dias_reabsorbidos_training = round(delay_inicial * st.session_state.get('reabsorcion_training', 0) / 100)
-                total_reabsorbido = dias_reabsorbidos_e2e + dias_reabsorbidos_training
+            if delay_total_proyecto > 0:
+                # Mostrar impacto de reabsorción
+                penalizacion_total_original = sum((delays_esc.get(fase, 0) * DELAY_PENALTY_FACTORS.get(fase, 0) * 100) 
+                                                 for fase in DELAY_PENALTY_FACTORS.keys())
+                penalizacion_despues_reabsorcion = penalizacion_total_original * (1 - reabsorcion_total / 100)
+                mejora_calidad = penalizacion_total_original - penalizacion_despues_reabsorcion
                 
                 reabsorcion_data = []
                 if st.session_state.get('reabsorcion_e2e', 0) > 0:
                     reabsorcion_data.append({
                         "Fase": "E2E",
                         "Reabsorción (%)": f"{st.session_state.get('reabsorcion_e2e', 0)}%",
-                        "Días Reabsorbidos": dias_reabsorbidos_e2e
+                        "Mejora Calidad (%)": f"{mejora_calidad * st.session_state.get('reabsorcion_e2e', 0) / reabsorcion_total:.2f}"
                     })
                 if st.session_state.get('reabsorcion_training', 0) > 0:
                     reabsorcion_data.append({
                         "Fase": "Training",
                         "Reabsorción (%)": f"{st.session_state.get('reabsorcion_training', 0)}%",
-                        "Días Reabsorbidos": dias_reabsorbidos_training
+                        "Mejora Calidad (%)": f"{mejora_calidad * st.session_state.get('reabsorcion_training', 0) / reabsorcion_total:.2f}"
                     })
                 
                 if reabsorcion_data:
                     df_reabsorcion = pd.DataFrame(reabsorcion_data)
                     st.dataframe(df_reabsorcion, use_container_width=True)
-                    st.success(f"✨ Total reabsorbido: {total_reabsorbido} días de {delay_inicial} días de delay")
+                    st.success(f"✨ Mejora total en calidad: +{mejora_calidad:.2f}% al final del proyecto")
+                    
+                    # Mostrar la calidad esperada al final
+                    calidad_final_esperada = calidad_esc_gl + mejora_calidad
+                    st.info(f"📊 Calidad esperada en Go-Live después de reabsorción: {calidad_final_esperada:.1f}%")
             else:
                 st.info("No hay delays para reabsorber")
         
@@ -1045,6 +1051,35 @@ with main_container:
                     )
                 except Exception as e:
                     st.warning(f"Error calculando escenario '{scenario_name}': {str(e)}")
+    
+    # Add reabsorption bands if active
+    reabsorcion_total = st.session_state.get('reabsorcion_e2e', 0) + st.session_state.get('reabsorcion_training', 0)
+    if reabsorcion_total > 0:
+        # E2E reabsorption band
+        if st.session_state.get('reabsorcion_e2e', 0) > 0:
+            fig.add_vrect(
+                x0=baseline_windows["E2E"][0].strftime("%Y-%m-%d"),
+                x1=baseline_windows["E2E"][1].strftime("%Y-%m-%d"),
+                fillcolor="rgba(72, 219, 251, 0.1)",  # Light blue
+                layer="below",
+                line_width=0,
+                annotation_text=f"Reabsorción E2E: {st.session_state.get('reabsorcion_e2e', 0)}%",
+                annotation_position="top left",
+                annotation_font_size=10
+            )
+        
+        # Training reabsorption band
+        if st.session_state.get('reabsorcion_training', 0) > 0:
+            fig.add_vrect(
+                x0=baseline_windows["Training"][0].strftime("%Y-%m-%d"),
+                x1=baseline_windows["Training"][1].strftime("%Y-%m-%d"),
+                fillcolor="rgba(29, 209, 161, 0.1)",  # Light green
+                layer="below",
+                line_width=0,
+                annotation_text=f"Reabsorción Training: {st.session_state.get('reabsorcion_training', 0)}%",
+                annotation_position="top left",
+                annotation_font_size=10
+            )
 
     # Add phase lines
     for fase, (start, end) in scenario_windows.items():
