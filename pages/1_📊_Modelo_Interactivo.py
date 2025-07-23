@@ -275,45 +275,9 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                     actual_end = actual_start + timedelta(days=duration)
                     effective_windows[current_phase] = (actual_start, actual_end)
 
-                # 2. Calcular el delay acumulado hasta antes de E2E
-                # El delay que se puede reabsorber es el acumulado hasta Migration
-                delay_hasta_migration = max(0, (effective_windows["Migration"][1] - baseline_windows["Migration"][1]).days)
-
-                # 3. Leer los factores de reabsorción
+                # 2. Leer los factores de reabsorción
                 reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
                 reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
-
-                # 4. Aplicar reabsorción en E2E
-                dias_reabsorbidos_e2e = round(delay_hasta_migration * reabsorcion_e2e_pct)
-                delay_despues_e2e = delay_hasta_migration - dias_reabsorbidos_e2e
-
-                # 5. Recalcular fechas de E2E considerando la reabsorción
-                e2e_start_con_delay = baseline_windows["E2E"][0] + timedelta(days=delay_despues_e2e)
-                e2e_duration = (sim_windows["E2E"][1] - sim_windows["E2E"][0]).days
-                e2e_end_con_reabsorcion = e2e_start_con_delay + timedelta(days=e2e_duration)
-                effective_windows["E2E"] = (e2e_start_con_delay, e2e_end_con_reabsorcion)
-
-                # 6. Aplicar reabsorción en Training
-                dias_reabsorbidos_training = round(delay_hasta_migration * reabsorcion_training_pct)
-                delay_total_reabsorbido = dias_reabsorbidos_e2e + dias_reabsorbidos_training
-                delay_final = max(0, delay_hasta_migration - delay_total_reabsorbido)
-
-                # 7. Recalcular fechas de Training y fases posteriores con el delay final
-                train_start_con_delay = baseline_windows["Training"][0] + timedelta(days=delay_final)
-                train_duration = (sim_windows["Training"][1] - sim_windows["Training"][0]).days
-                train_end_con_reabsorcion = train_start_con_delay + timedelta(days=train_duration)
-                effective_windows["Training"] = (train_start_con_delay, train_end_con_reabsorcion)
-
-                # 8. Propagar el delay final a PRO y Hypercare
-                pro_start_con_delay = baseline_windows["PRO"][0] + timedelta(days=delay_final)
-                pro_duration = (sim_windows["PRO"][1] - sim_windows["PRO"][0]).days
-                pro_end_con_delay = pro_start_con_delay + timedelta(days=pro_duration)
-                effective_windows["PRO"] = (pro_start_con_delay, pro_end_con_delay)
-
-                hyper_start_con_delay = baseline_windows["Hypercare"][0] + timedelta(days=delay_final)
-                hyper_duration = (sim_windows["Hypercare"][1] - sim_windows["Hypercare"][0]).days
-                hyper_end_con_delay = hyper_start_con_delay + timedelta(days=hyper_duration)
-                effective_windows["Hypercare"] = (hyper_start_con_delay, hyper_end_con_delay)
 
                 # Calcular delays y penalizaciones basado en las fechas FINALES
                 final_delays = {fase: max(0, (effective_windows[fase][1] - baseline_windows[fase][1]).days) for fase in baseline_windows.keys()}
@@ -325,53 +289,73 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                 end_date = last_phase_end + timedelta(days=180)
                 fechas_evaluacion = pd.date_range(start=start_date, end=end_date, freq='D')
 
-                calidades = []
+                # Primero calcular las calidades del baseline para interpolación
+                # Esto nos da la referencia de calidad sin delays
+                calidades_baseline_ref = []
                 for fecha in fechas_evaluacion:
-                    # Calcular parámetros con penalizaciones normales
-                    params_con_penalty = {}
-                    params_sin_penalty = {}
-                    
+                    params_baseline = {}
                     for fase in baseline_windows.keys():
                         pct = get_completion_pct(
+                            baseline_windows[fase][0], baseline_windows[fase][1], fecha,
+                            baseline_duration=baseline_days.get(fase)
+                        )
+                        params_baseline[fase] = (pct / 100) * 1.0
+                    calidad_baseline = quality_model_econometric(params_baseline, {k: 0 for k in st.session_state.risk_values.keys()})
+                    calidades_baseline_ref.append(calidad_baseline)
+                
+                # Ahora calcular las calidades del escenario con posibilidad de reabsorción
+                calidades = []
+                for i, fecha in enumerate(fechas_evaluacion):
+                    # Calcular parámetros del escenario con delays y penalizaciones
+                    params_con_penalty = {}
+                    
+                    for fase in baseline_windows.keys():
+                        pct_con_delay = get_completion_pct(
                             effective_windows[fase][0], effective_windows[fase][1], fecha,
                             baseline_duration=baseline_days.get(fase)
                         )
-                        # Con penalización
-                        params_con_penalty[fase] = (pct / 100) * penalty_factors[fase]
-                        # Sin penalización (baseline)
-                        params_sin_penalty[fase] = (pct / 100) * 1.0
+                        params_con_penalty[fase] = (pct_con_delay / 100) * penalty_factors[fase]
                     
-                    # Calcular calidad con y sin penalizaciones
+                    # Calcular calidad del escenario con penalizaciones
                     calidad_con_penalty = quality_model_econometric(params_con_penalty, st.session_state.risk_values)
-                    calidad_sin_penalty = quality_model_econometric(params_sin_penalty, st.session_state.risk_values)
+                    
+                    # Obtener la calidad del baseline en este punto
+                    calidad_baseline_en_fecha = calidades_baseline_ref[i]
                     
                     # Calcular el factor de reabsorción gradual según la fase actual
                     factor_reabsorcion = 0.0
                     
+                    # Si no hay reabsorción configurada, mantener en 0
+                    if reabsorcion_e2e_pct == 0 and reabsorcion_training_pct == 0:
+                        factor_reabsorcion = 0.0
                     # Si estamos antes de E2E, no hay reabsorción
-                    if fecha < effective_windows["E2E"][0]:
+                    elif fecha < baseline_windows["E2E"][0]:
                         factor_reabsorcion = 0.0
                     
                     # Si estamos en E2E, aplicar reabsorción gradual
-                    elif effective_windows["E2E"][0] <= fecha <= effective_windows["E2E"][1]:
-                        progreso_e2e = (fecha - effective_windows["E2E"][0]).days / max(1, (effective_windows["E2E"][1] - effective_windows["E2E"][0]).days)
-                        factor_reabsorcion = progreso_e2e * reabsorcion_e2e_pct
+                    elif baseline_windows["E2E"][0] <= fecha <= baseline_windows["E2E"][1]:
+                        duracion_e2e = (baseline_windows["E2E"][1] - baseline_windows["E2E"][0]).days
+                        if duracion_e2e > 0:
+                            progreso_e2e = (fecha - baseline_windows["E2E"][0]).days / duracion_e2e
+                            factor_reabsorcion = min(1.0, progreso_e2e) * reabsorcion_e2e_pct
                     
                     # Si estamos entre E2E y Training, mantener la reabsorción de E2E
-                    elif effective_windows["E2E"][1] < fecha < effective_windows["Training"][0]:
+                    elif baseline_windows["E2E"][1] < fecha < baseline_windows["Training"][0]:
                         factor_reabsorcion = reabsorcion_e2e_pct
                     
                     # Si estamos en Training, aplicar reabsorción gradual adicional
-                    elif effective_windows["Training"][0] <= fecha <= effective_windows["Training"][1]:
-                        progreso_training = (fecha - effective_windows["Training"][0]).days / max(1, (effective_windows["Training"][1] - effective_windows["Training"][0]).days)
-                        factor_reabsorcion = reabsorcion_e2e_pct + (progreso_training * reabsorcion_training_pct)
+                    elif baseline_windows["Training"][0] <= fecha <= baseline_windows["Training"][1]:
+                        duracion_training = (baseline_windows["Training"][1] - baseline_windows["Training"][0]).days
+                        if duracion_training > 0:
+                            progreso_training = (fecha - baseline_windows["Training"][0]).days / duracion_training
+                            factor_reabsorcion = reabsorcion_e2e_pct + (min(1.0, progreso_training) * reabsorcion_training_pct)
                     
                     # Si estamos después de Training, aplicar reabsorción total
-                    elif fecha > effective_windows["Training"][1]:
+                    elif fecha > baseline_windows["Training"][1]:
                         factor_reabsorcion = reabsorcion_e2e_pct + reabsorcion_training_pct
                     
-                    # Interpolar entre calidad con penalización y calidad sin penalización
-                    calidad_final = calidad_con_penalty + (calidad_sin_penalty - calidad_con_penalty) * factor_reabsorcion
+                    # Interpolar entre calidad con penalización y calidad del baseline
+                    calidad_final = calidad_con_penalty + (calidad_baseline_en_fecha - calidad_con_penalty) * factor_reabsorcion
                     calidades.append(calidad_final)
 
                 end_dates = {fase: effective_windows[fase][1] for fase in baseline_windows}
