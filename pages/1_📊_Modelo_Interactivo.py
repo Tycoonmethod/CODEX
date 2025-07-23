@@ -275,29 +275,45 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                     actual_end = actual_start + timedelta(days=duration)
                     effective_windows[current_phase] = (actual_start, actual_end)
 
-                # 2. Calcular el delay original de Migration (la fuente del problema)
-                delay_mig = max(0, (effective_windows["Migration"][1] - baseline_windows["Migration"][1]).days)
+                # 2. Calcular el delay acumulado hasta antes de E2E
+                # El delay que se puede reabsorber es el acumulado hasta Migration
+                delay_hasta_migration = max(0, (effective_windows["Migration"][1] - baseline_windows["Migration"][1]).days)
 
                 # 3. Leer los factores de reabsorción
                 reabsorcion_e2e_pct = st.session_state.get('reabsorcion_e2e', 0) / 100.0
                 reabsorcion_training_pct = st.session_state.get('reabsorcion_training', 0) / 100.0
 
-                # 4. Calcular los días reabsorbidos y el retraso neto final
-                dias_reabsorbidos = delay_mig * (reabsorcion_e2e_pct + reabsorcion_training_pct)
-                net_delay_propagado = max(0, round(delay_mig - dias_reabsorbidos))
+                # 4. Aplicar reabsorción en E2E
+                dias_reabsorbidos_e2e = round(delay_hasta_migration * reabsorcion_e2e_pct)
+                delay_despues_e2e = delay_hasta_migration - dias_reabsorbidos_e2e
 
-                # 5. RECALCULAR las fechas de E2E y Training basándose en el retraso NETO
-                mig_end_baseline = baseline_windows["Migration"][1]
-                
-                e2e_start_corregido = mig_end_baseline + timedelta(days=net_delay_propagado + 1)
+                # 5. Recalcular fechas de E2E considerando la reabsorción
+                e2e_start_con_delay = baseline_windows["E2E"][0] + timedelta(days=delay_despues_e2e)
                 e2e_duration = (sim_windows["E2E"][1] - sim_windows["E2E"][0]).days
-                e2e_end_corregido = e2e_start_corregido + timedelta(days=e2e_duration)
-                effective_windows["E2E"] = (e2e_start_corregido, e2e_end_corregido)
+                e2e_end_con_reabsorcion = e2e_start_con_delay + timedelta(days=e2e_duration)
+                effective_windows["E2E"] = (e2e_start_con_delay, e2e_end_con_reabsorcion)
 
-                train_start_corregido = e2e_end_corregido + timedelta(days=1)
+                # 6. Aplicar reabsorción en Training
+                dias_reabsorbidos_training = round(delay_hasta_migration * reabsorcion_training_pct)
+                delay_total_reabsorbido = dias_reabsorbidos_e2e + dias_reabsorbidos_training
+                delay_final = max(0, delay_hasta_migration - delay_total_reabsorbido)
+
+                # 7. Recalcular fechas de Training y fases posteriores con el delay final
+                train_start_con_delay = baseline_windows["Training"][0] + timedelta(days=delay_final)
                 train_duration = (sim_windows["Training"][1] - sim_windows["Training"][0]).days
-                train_end_corregido = train_start_corregido + timedelta(days=train_duration)
-                effective_windows["Training"] = (train_start_corregido, train_end_corregido)
+                train_end_con_reabsorcion = train_start_con_delay + timedelta(days=train_duration)
+                effective_windows["Training"] = (train_start_con_delay, train_end_con_reabsorcion)
+
+                # 8. Propagar el delay final a PRO y Hypercare
+                pro_start_con_delay = baseline_windows["PRO"][0] + timedelta(days=delay_final)
+                pro_duration = (sim_windows["PRO"][1] - sim_windows["PRO"][0]).days
+                pro_end_con_delay = pro_start_con_delay + timedelta(days=pro_duration)
+                effective_windows["PRO"] = (pro_start_con_delay, pro_end_con_delay)
+
+                hyper_start_con_delay = baseline_windows["Hypercare"][0] + timedelta(days=delay_final)
+                hyper_duration = (sim_windows["Hypercare"][1] - sim_windows["Hypercare"][0]).days
+                hyper_end_con_delay = hyper_start_con_delay + timedelta(days=hyper_duration)
+                effective_windows["Hypercare"] = (hyper_start_con_delay, hyper_end_con_delay)
 
                 # Calcular delays y penalizaciones basado en las fechas FINALES
                 final_delays = {fase: max(0, (effective_windows[fase][1] - baseline_windows[fase][1]).days) for fase in baseline_windows.keys()}
@@ -312,12 +328,33 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
                 calidades = []
                 for fecha in fechas_evaluacion:
                     params = {}
+                    
+                    # Calcular el factor de reabsorción gradual según la fase actual
+                    factor_reabsorcion = 0.0
+                    
+                    # Si estamos en E2E, aplicar reabsorción gradual
+                    if effective_windows["E2E"][0] <= fecha <= effective_windows["E2E"][1]:
+                        progreso_e2e = (fecha - effective_windows["E2E"][0]).days / max(1, (effective_windows["E2E"][1] - effective_windows["E2E"][0]).days)
+                        factor_reabsorcion = progreso_e2e * reabsorcion_e2e_pct
+                    
+                    # Si estamos en Training, aplicar reabsorción gradual adicional
+                    elif effective_windows["Training"][0] <= fecha <= effective_windows["Training"][1]:
+                        progreso_training = (fecha - effective_windows["Training"][0]).days / max(1, (effective_windows["Training"][1] - effective_windows["Training"][0]).days)
+                        factor_reabsorcion = reabsorcion_e2e_pct + (progreso_training * reabsorcion_training_pct)
+                    
+                    # Si estamos después de Training, aplicar reabsorción total
+                    elif fecha > effective_windows["Training"][1]:
+                        factor_reabsorcion = reabsorcion_e2e_pct + reabsorcion_training_pct
+                    
                     for fase in baseline_windows.keys():
                         pct = get_completion_pct(
                             effective_windows[fase][0], effective_windows[fase][1], fecha,
                             baseline_duration=baseline_days.get(fase)
                         )
-                        params[fase] = (pct / 100) * penalty_factors[fase]
+                        
+                        # Aplicar penalización con ajuste por reabsorción
+                        penalty_ajustada = 1 - ((1 - penalty_factors[fase]) * (1 - factor_reabsorcion))
+                        params[fase] = (pct / 100) * penalty_ajustada
 
                     calidad = quality_model_econometric(params, st.session_state.risk_values)
                     calidades.append(calidad)
@@ -445,6 +482,21 @@ with st.sidebar:
         for fase in baseline_windows.keys():
             if f"slider_{fase}" in st.session_state:
                 del st.session_state[f"slider_{fase}"]
+        # Resetear también los valores de riesgo a 0
+        st.session_state.risk_values = {
+            'UAT': 0,
+            'Migration': 0,
+            'E2E': 0,
+            'Training': 0,
+            'PRO': 0,
+            'Hypercare': 0
+        }
+        # Resetear los valores de reabsorción a 0
+        st.session_state.reabsorcion_e2e = 0
+        st.session_state.reabsorcion_training = 0
+        # Resetear otros parámetros
+        st.session_state.budget_consumed = 100
+        st.session_state.external_risks = 0
         # Limpiar también la fecha de Go-Live sugerida
         if 'suggested_golive_date' in st.session_state:
             del st.session_state.suggested_golive_date
@@ -482,22 +534,34 @@ with st.sidebar:
     # Delay Reabsorption Section
     with st.expander("🔄 Factores de Reabsorción de Retrasos", expanded=False):
         st.markdown("#### Configura la capacidad de reabsorción de delays por fase")
+        st.info("💡 Entre E2E y Training pueden reabsorber hasta el 100% del delay total. Si una fase alcanza el 100%, la otra se ajusta a 0%.")
         
-        st.slider(
+        # Reabsorción E2E con límite interdependiente
+        max_e2e = 100 - st.session_state.reabsorcion_training
+        new_e2e = st.slider(
             "Reabsorción de Delay en E2E (%)",
-            0, 100,
-            value=st.session_state.reabsorcion_e2e,
-            key="reabsorcion_e2e",
-            help="Porcentaje del retraso acumulado que el equipo de E2E puede reabsorber."
+            0, max_e2e,
+            value=min(st.session_state.reabsorcion_e2e, max_e2e),
+            key="reabsorcion_e2e_slider",
+            help=f"Porcentaje del retraso acumulado que el equipo de E2E puede reabsorber durante su fase. Máximo disponible: {max_e2e}%"
         )
+        st.session_state.reabsorcion_e2e = new_e2e
         
-        st.slider(
+        # Reabsorción Training con límite interdependiente
+        max_training = 100 - st.session_state.reabsorcion_e2e
+        new_training = st.slider(
             "Reabsorción de Delay en Training (%)",
-            0, 100,
-            value=st.session_state.reabsorcion_training,
-            key="reabsorcion_training",
-            help="Porcentaje del retraso acumulado que el equipo de Training puede reabsorber."
+            0, max_training,
+            value=min(st.session_state.reabsorcion_training, max_training),
+            key="reabsorcion_training_slider",
+            help=f"Porcentaje del retraso acumulado que el equipo de Training puede reabsorber durante su fase. Máximo disponible: {max_training}%"
         )
+        st.session_state.reabsorcion_training = new_training
+        
+        # Mostrar el total de reabsorción
+        total_reabsorcion = st.session_state.reabsorcion_e2e + st.session_state.reabsorcion_training
+        if total_reabsorcion > 0:
+            st.markdown(f"**Total de reabsorción:** {total_reabsorcion}% del delay acumulado")
     
     # Health Score Parameters Section
     with st.expander("🏥 Parámetros de Salud del Proyecto", expanded=False):
@@ -695,7 +759,9 @@ fechas_base, calidad_base, _, _ = construir_cronograma_seguro(
     sim_windows=baseline_windows
 )
 
-# Construir cronograma escenario (con penalizaciones contra el baseline)
+# Construir cronograma escenario
+# NOTA: Si scenario_windows es idéntico a baseline_windows (valores por defecto),
+# no se calcularán delays y el escenario seguirá exactamente al baseline
 fechas_esc, calidad_esc, delays_esc, end_dates_esc = construir_cronograma_seguro(
     sim_windows=scenario_windows, 
     penalty_baseline=baseline_windows
@@ -843,7 +909,11 @@ with main_container:
 
     with col1:
         st.title(TEXT[lang]["page1_name"])
-        st.info(f"🔔 La calidad en Go-Live baja de {calidad_base_gl:.1f}% a {calidad_esc_gl:.1f}% (Δ {delta_gl:+.1f}%)")
+        # Mostrar mensaje apropiado según si hay cambios o no
+        if abs(delta_gl) < 0.01:  # Si la diferencia es menor a 0.01%, considerarlo sin cambios
+            st.info(f"✅ La calidad en Go-Live se mantiene en {calidad_base_gl:.1f}% (Sin cambios vs Baseline)")
+        else:
+            st.info(f"🔔 La calidad en Go-Live baja de {calidad_base_gl:.1f}% a {calidad_esc_gl:.1f}% (Δ {delta_gl:+.1f}%)")
         st.markdown(card("📈 Evolución de Calidad", ""), unsafe_allow_html=True)
     
     with col2:
@@ -866,6 +936,9 @@ with main_container:
             # Usar st.dataframe para una tabla nativa y más limpia
             st.markdown("##### ⚠️ Análisis de Impactos")
             st.dataframe(df_retrasos, use_container_width=True)
+        else:
+            st.markdown("##### ✅ Análisis de Impactos")
+            st.success("No hay retrasos detectados. El escenario sigue el baseline.")
 
         # Nueva tabla de desglose de penalizaciones
         st.markdown("##### 🔍 Desglose de Penalización")
@@ -880,6 +953,44 @@ with main_container:
             })
         df_penalties = pd.DataFrame(penalty_rows)
         st.dataframe(df_penalties, use_container_width=True)
+        
+        # Mostrar información sobre reabsorción si está activa
+        reabsorcion_total = st.session_state.get('reabsorcion_e2e', 0) + st.session_state.get('reabsorcion_training', 0)
+        if reabsorcion_total > 0:
+            st.markdown("##### 🔄 Reabsorción Activa")
+            
+            # Calcular el delay inicial hasta Migration
+            delay_inicial = 0
+            if "Migration" in delays_esc and delays_esc["Migration"] > 0:
+                delay_inicial = delays_esc["Migration"]
+            elif "UAT" in delays_esc and delays_esc["UAT"] > 0:
+                delay_inicial = delays_esc["UAT"]
+            
+            if delay_inicial > 0:
+                dias_reabsorbidos_e2e = round(delay_inicial * st.session_state.get('reabsorcion_e2e', 0) / 100)
+                dias_reabsorbidos_training = round(delay_inicial * st.session_state.get('reabsorcion_training', 0) / 100)
+                total_reabsorbido = dias_reabsorbidos_e2e + dias_reabsorbidos_training
+                
+                reabsorcion_data = []
+                if st.session_state.get('reabsorcion_e2e', 0) > 0:
+                    reabsorcion_data.append({
+                        "Fase": "E2E",
+                        "Reabsorción (%)": f"{st.session_state.get('reabsorcion_e2e', 0)}%",
+                        "Días Reabsorbidos": dias_reabsorbidos_e2e
+                    })
+                if st.session_state.get('reabsorcion_training', 0) > 0:
+                    reabsorcion_data.append({
+                        "Fase": "Training",
+                        "Reabsorción (%)": f"{st.session_state.get('reabsorcion_training', 0)}%",
+                        "Días Reabsorbidos": dias_reabsorbidos_training
+                    })
+                
+                if reabsorcion_data:
+                    df_reabsorcion = pd.DataFrame(reabsorcion_data)
+                    st.dataframe(df_reabsorcion, use_container_width=True)
+                    st.success(f"✨ Total reabsorbido: {total_reabsorbido} días de {delay_inicial} días de delay")
+            else:
+                st.info("No hay delays para reabsorber")
         
     # Create the plot with enhanced styling
     fig = go.Figure()
