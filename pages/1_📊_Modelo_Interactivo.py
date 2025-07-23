@@ -217,7 +217,16 @@ def construir_cronograma_seguro(sim_windows, penalty_baseline=None):
     PHASE_SEQUENCE = ["UAT", "Migration", "E2E", "Training", "PRO", "Hypercare"]
     
     try:
-        if not penalty_baseline:
+        # Verificar si sim_windows es idéntico a penalty_baseline
+        # Si es así, tratarlo como baseline (sin delays)
+        is_identical_to_baseline = False
+        if penalty_baseline:
+            is_identical_to_baseline = all(
+                sim_windows.get(fase) == penalty_baseline.get(fase) 
+                for fase in penalty_baseline.keys()
+            )
+        
+        if not penalty_baseline or is_identical_to_baseline:
             # Para el baseline, sin delays ni reabsorción
             effective_windows = {k: v for k, v in sim_windows.items()}
             
