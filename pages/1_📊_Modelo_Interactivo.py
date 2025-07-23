@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, timedelta
+import time  # Para time.time()
 import traceback
 from translations import TEXT, LANGUAGES
 from styles import (
@@ -130,11 +131,14 @@ def get_completion_pct(
     if isinstance(eval_date, str):
         eval_date = datetime.strptime(eval_date, "%Y-%m-%d")
     if isinstance(start, date) and not isinstance(start, datetime):
-        start = datetime.combine(start, time(0, 0))
+        from datetime import time as dt_time
+        start = datetime.combine(start, dt_time(0, 0))
     if isinstance(end, date) and not isinstance(end, datetime):
-        end = datetime.combine(end, time(0, 0))
+        from datetime import time as dt_time
+        end = datetime.combine(end, dt_time(0, 0))
     if isinstance(eval_date, date) and not isinstance(eval_date, datetime):
-        eval_date = datetime.combine(eval_date, time(0, 0))
+        from datetime import time as dt_time
+        eval_date = datetime.combine(eval_date, dt_time(0, 0))
 
     if eval_date < start:
         return 0.0
@@ -166,8 +170,10 @@ def to_dt(x):
         return datetime.now()
     if isinstance(x, datetime):
         return x
-    if isinstance(x, date):
-        return datetime.combine(x, time(0, 0))
+    if isinstance(x, date) and not isinstance(x, datetime):
+        # Asegurarse de que time esté importado correctamente
+        from datetime import time as dt_time
+        return datetime.combine(x, dt_time(0, 0))
     if isinstance(x, (int, float)):
         return datetime.fromtimestamp(x)
     return x
@@ -182,9 +188,11 @@ def get_days_between(start_date, end_date):
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d")
     if isinstance(start_date, date) and not isinstance(start_date, datetime):
-        start_date = datetime.combine(start_date, time(0, 0))
+        from datetime import time as dt_time
+        start_date = datetime.combine(start_date, dt_time(0, 0))
     if isinstance(end_date, date) and not isinstance(end_date, datetime):
-        end_date = datetime.combine(end_date, time(0, 0))
+        from datetime import time as dt_time
+        end_date = datetime.combine(end_date, dt_time(0, 0))
     return (end_date - start_date).days
 
 
@@ -195,7 +203,8 @@ def add_days(base_date, days):
     if isinstance(base_date, str):
         base_date = datetime.strptime(base_date, "%Y-%m-%d")
     if isinstance(base_date, date) and not isinstance(base_date, datetime):
-        base_date = datetime.combine(base_date, time(0, 0))
+        from datetime import time as dt_time
+        base_date = datetime.combine(base_date, dt_time(0, 0))
     return base_date + timedelta(days=days)
 
 
@@ -703,9 +712,10 @@ calidad_esc_gl = np.interp(go_live_date.timestamp(), esc_ts, calidad_esc)
 delta_gl = calidad_esc_gl - calidad_base_gl
 
 # Countdown hasta Go-Live
-dias_para_golive = max(
-    0, (to_dt(datetime(2025, 11, 3)) - to_dt(datetime.now().date())).days
-)
+# Calcular de manera más robusta
+target_date = datetime(2025, 11, 3)
+current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+dias_para_golive = max(0, (target_date - current_date).days)
 
 # --- KPIs Panel ---
 st.markdown("### 📊 KPIs del Proyecto")
