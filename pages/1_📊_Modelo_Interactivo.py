@@ -662,25 +662,6 @@ with st.sidebar:
                 st.warning("⚠️ El modelo puede estar tardando más de lo esperado. Considera optimizar.")
             else:
                 st.info("✅ Rendimiento del modelo dentro de parámetros normales.")
-        
-        # Debug de reabsorción
-        st.markdown("#### Debug de Reabsorción")
-        if st.session_state.get('reabsorcion_e2e', 0) > 0 or st.session_state.get('reabsorcion_training', 0) > 0:
-            # Mostrar puntos de verificación
-            fechas_verificacion = [
-                ("Antes de E2E", datetime(2025, 8, 15)),
-                ("Mitad de E2E", datetime(2025, 9, 15)),
-                ("Fin de E2E", datetime(2025, 9, 30)),
-                ("Mitad de Training", datetime(2025, 10, 15)),
-                ("Fin de Training", datetime(2025, 10, 31)),
-                ("Go-Live", datetime(2025, 11, 3))
-            ]
-            
-            st.markdown("**Calidad en puntos clave:**")
-            for nombre, fecha in fechas_verificacion:
-                idx = next((i for i, f in enumerate(fechas_esc) if f.date() == fecha.date()), None)
-                if idx is not None:
-                    st.write(f"- {nombre}: {calidad_esc[idx]:.1f}%")
 
 # Desempaquetar fechas de escenario
 uat_start, uat_end = scenario_windows["UAT"]
