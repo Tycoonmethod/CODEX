@@ -1,70 +1,75 @@
-# Backup 2025-07-11 16:58:25 - Versión con Formato Monetario
+# Backup del Desarrollo Actual - 23 de Julio 2025
 
-## 📝 Descripción
-Esta copia de seguridad contiene la versión del dashboard con todas las mejoras de formato monetario implementadas.
+## Información del Backup
 
-## 🎯 Características Principales
+**Rama de Backup:** `backup/desarrollo-actual-2025-07-23`
+**Fecha de Creación:** 23 de Julio 2025
+**Commit Base:** `d910e1a`
 
-### ✅ Mejoras de Formato Monetario
-- **Inputs formateados**: Todos los campos monetarios muestran formato "1,234,567.00€"
-- **Parsing inteligente**: Acepta entrada "50000" y la convierte a "50,000.00€"
-- **Validación robusta**: Mantiene valores anteriores si la entrada es inválida
-- **Persistencia**: Valores se guardan correctamente en session_state
+## Estado del Desarrollo
 
-### 💰 Secciones Mejoradas
-1. **Métricas Financieras**: Coste Estimado con formato profesional
-2. **Distribución de Costes**: 
-   - Inputs por equipo con formato monetario
-   - Gráfico de tarta con valores en €
-   - Métricas resumidas formateadas
-3. **Seguimiento Histórico**:
-   - Budget inputs formateados
-   - Tarifa diaria con formato monetario
-   - Forecast con hover formateado
-4. **Análisis ROI**: Beneficio anual con formato monetario
+Este backup contiene el estado completo del proyecto con todas las funcionalidades implementadas:
 
-### 🔧 Funciones Helper
-- `formatted_money_input()`: Input monetario con formato automático
-- `format_money()`: Formato consistente para valores monetarios
+### ✅ Funcionalidades Completadas
 
-### 📊 Gráficos Mejorados
-- **Pie Chart**: Etiquetas internas con valores monetarios
-- **Forecast**: Eje Y y tooltips con formato €
-- **Hover**: Formato "Día X: 1,234.56€"
+1. **Corrección de Errores de Datetime**
+   - Fix del conflicto de importación entre `time` de datetime y módulo `time`
+   - Corrección del error TypeError en la función `to_dt`
 
-### 🛠️ Correcciones Técnicas
-- **Matriz de Riesgo**: Error de layout de Plotly corregido
-- **Session State**: Inicialización robusta de todas las variables
-- **Imports**: Optimizados para mejor rendimiento
+2. **Comportamiento Inicial del Escenario**
+   - El escenario sigue exactamente al baseline cuando no hay cambios en filtros
+   - Sin delays visibles al lanzar la aplicación
 
-## 📋 Archivos Incluidos
-- `app.py`: Aplicación principal multi-página
-- `styles.py`: Estilos CSS y configuración Plotly
-- `translations.py`: Textos en múltiples idiomas
-- `pages/`: Todas las páginas del dashboard
-- `scripts/`: Scripts de análisis y validación
-- `requirements.txt`: Dependencias del proyecto
-- `README.md`: Documentación del proyecto
+3. **Sistema de Reabsorción de Delays**
+   - Sliders interdependientes (E2E + Training ≤ 100%)
+   - Lógica de reabsorción por compensación durante fases específicas
+   - Visualización gradual en el gráfico durante E2E y Training
 
-## 🚀 Cómo Usar Esta Copia
-1. Copiar todos los archivos al directorio principal
-2. Ejecutar: `streamlit run app.py`
-3. Navegar a "Dashboard Avanzado" para ver las mejoras monetarias
+4. **Visualización Mejorada**
+   - Bandas sombreadas en el gráfico para zonas de reabsorción
+   - Tabla de análisis de impacto con mejoras de calidad
+   - Interpolación dinámica de penalty factors
 
-## 📈 Resultados Esperados
-- Todos los valores monetarios con separadores de miles
-- Inputs que aceptan entrada libre y la formatean automáticamente
-- Gráficos con valores monetarios profesionales
-- Experiencia de usuario mejorada para gestión financiera
+5. **Robustez del Modelo**
+   - Manejo de errores mejorado
+   - Cálculos precisos de delays y penalizaciones
+   - Integridad de datos mantenida
 
-## 🔗 Funcionalidades Clave
-- **Monte Carlo**: Simulación de 10,000 iteraciones con histograma
-- **Gestión de Equipos**: Por empresa (EDP, NTT DATA, Minsait)
-- **Tracking Financiero**: Forecast por equipo con métricas
-- **Análisis de Riesgo**: Matriz interactiva con clasificación
-- **ROI**: Cálculo automático con payback
+### 📊 Características Técnicas
+
+- **Modelo Econométrico:** Funcionando correctamente
+- **Interfaz de Usuario:** Completamente funcional
+- **Gráficos:** Visualización correcta de reabsorción
+- **Tablas:** Análisis detallado de impactos
+- **Sidebar:** Controles de reabsorción sin errores
+
+### 🔄 Cómo Restaurar
+
+Si necesitas volver a este estado:
+
+```bash
+# Cambiar a la rama de backup
+git checkout backup/desarrollo-actual-2025-07-23
+
+# O crear una nueva rama desde este backup
+git checkout -b nueva-rama backup/desarrollo-actual-2025-07-23
+```
+
+### 📝 Notas Importantes
+
+- Este backup representa un estado estable y funcional
+- Todas las funcionalidades de reabsorción están implementadas y probadas
+- La aplicación funciona correctamente en Streamlit Cloud
+- No hay errores conocidos en este estado
+
+### 🚀 Estado de Despliegue
+
+- **Streamlit Cloud:** Funcionando correctamente
+- **URL:** https://8rrugpgtpx6faj5jwvyjh6.streamlit.app/
+- **Estado:** Estable y operativo
 
 ---
-**Fecha de Creación**: 2025-07-11 16:58:25
-**Versión**: Formato Monetario v1.0
-**Estado**: Estable y funcional 
+
+**Creado por:** Asistente de Desarrollo
+**Fecha:** 23 de Julio 2025
+**Propósito:** Backup de seguridad del desarrollo actual 
